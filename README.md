@@ -4,30 +4,42 @@
 
 [Done] Observed number of occurrences of codon (Obs) analysis
 
+
 [Done] Stat frequency of cusp software. cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
+
 
 [Done] Stat frequency of cusp software.
 
+
 [Done] Relative synonymous codon usage (RSCU) analysis
+
 
 [Done] Draw codon barplot
 
+
 [Done] Parity rule 2 (PR2) analysis
+
 
 [Done] Draw Neutrality curve
 
+
 [Done] Draw ENC plot
 
+
 [Done] Cups sortware anslysis
+
 
 [Done part] codonW sortware anslysis
 
 
 [Plan] Codon Bias Index
 
+
 [Plan] Frequency of OPtimal codons
 
+
 [Plan] CAI analysis
+
 
 [Plan] Corresponding analysis (COA)
 
@@ -35,9 +47,17 @@
 ## 依赖和测试环境
 
 scipy >= v1.11.4
+
+
 numpy >= v1.26.3
+
+
 seaborn >= v0.13.1
+
+
 matplotlib >= v3.8.2
+
+
 python >= v3.11.5
 
 ## 测试数据
@@ -118,7 +138,6 @@ print("版本号：",pycubcore.__version__)
 
 ```python
 ## example1: Effective number of codons (ENC) analysis
-
 ENCResult = pycubcore.ENC(inputfile, Genetic_Codes=16) #Genetic_Codes=16 选择遗传密码子表16 植物叶绿体
 pycubcore.DrawENC(ENCResult)
 ```
@@ -158,7 +177,6 @@ pycubcore.DrawNPA(NPAResult, show_label=True) #展示gene name
 
 ```python
 # example4: 计算 Obs, Franction, Frequency, RSCU
-
 GeneName, Seqence = next(fastaio.FastaIO(inputfile))
 print("输入的序列：\n")
 print(">"+GeneName+"\n", Seqence, sep="")
@@ -307,7 +325,6 @@ print(pycubcore.GetCusp(Obs, human_format=True)) #human_format=True 人类可阅
 
 ```python
 # example6: 获得 codonW 软件类似的结果
-
 GeneName, Seqence = next(fastaio.FastaIO(inputfile))
 print("输入的序列：\n")
 print(">"+GeneName+"\n", Seqence, sep="")
