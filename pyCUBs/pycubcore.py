@@ -2,8 +2,8 @@
 # coding: utf-8
 
 __author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2024/05/17"
-__all__ = ["GetObs", "GetFranction", "GetFrequency", "GetRSCU", 
-           "DrawCodonBarplot", "GetCusp", "Find4Dtv", "GetPR2"]
+__all__ = ["GetObs", "GetFranction", "GetFrequency", "GetRSCU", "DrawCodonBarplot", "GetCusp", "GetcodonW", 
+           "NPA", "DrawNPA", "GetNC", "GetGC3s", "ENC", "DrawENC", "Find4Dtv", "GetPR2", "PR2", "DrawPR2"]
 __version__ = "v0.01"
 
 from fastaio import FastaIO
@@ -234,7 +234,7 @@ def GetCusp(Obs, human_format:bool=False):
         return CupsResult
     else:
         return CupsResult
-    
+
 def GetcodonW(Obs, human_format:bool=False):
     """
     return codonW software calculate result.
@@ -396,6 +396,9 @@ def NPA(inputfile, Genetic_Codes, sym=True):
     return {"sym":sym, "R": R, "P":P,"slope":slope,"intercept":intercept, "GC12":GC12, "GC3":GC3, "GeneName":GeneName}
 
 def DrawNPA(NPAResult, show_label=True):
+    """
+    Draw NPA plot.
+    """
     
     import seaborn as sns
     import matplotlib.pyplot as plt
@@ -491,6 +494,9 @@ def GetNC(Obs):
     return ENC
 
 def GetGC3s(Obs):
+    """
+    Calculate GC3s.
+    """
     ATGC3s = {}
     for Acid in Obs:
         if Acid in ['*']:
@@ -504,7 +510,7 @@ def GetGC3s(Obs):
                 ATGC3s[Codon[2]] += Obs[Acid][Codon]
     GC3s= ATGC3s.get('G', 0)/sum(ATGC3s.values()) + ATGC3s.get('C', 0)/sum(ATGC3s.values())
     return GC3s
-    
+
 def ENC(inputfile, Genetic_Codes):
     """
     Effective number of codons (ENC) analysis
@@ -522,7 +528,7 @@ def ENC(inputfile, Genetic_Codes):
 
 def DrawENC(ENCResult, show_label=False):
     """
-    ENC plot analysis.
+    Draw ENC plot.
     """
     import numpy as np
     import matplotlib.pyplot as plt
@@ -533,19 +539,19 @@ def DrawENC(ENCResult, show_label=False):
     xs = ENCResult["GC3s"]
     ys = ENCResult["ENC"]
     labels = ENCResult["GeneName"]
-
+    
     plt.scatter(x=xs, y=ys, c='r')
     plt.xlim(0,1)
     plt.ylim(0,70)
     plt.xlabel("GC$_3$$_s$")
     plt.ylabel("ENC")
     plt.title("ENC plot analysis")
-
+    
     if show_label:
         for x,y,l in zip(xs,ys,labels):
             plt.text(x, y, l)
-
-    plt.plot(np.arange(0, 1, 0.005), gc2enc(np.arange(0, 1, 0.005)))
+    
+    plt.plot(np.arange(0, 1, 0.005), gc2enc(np.arange(0, 1, 0.005)), c='b')
     return None
 
 def Find4Dtv(Obs):
@@ -594,9 +600,12 @@ def GetPR2(Obs):
     AT3_bias_4d =A3_4d/(A3_4d+T3_4d)
     GC3_bias_4d =G3_4d/(G3_4d+C3_4d)
     return {"A3/(A3+T3)|4": AT3_bias_4d, "G3/(G3+C3)|4": GC3_bias_4d}
-
+ 
 def PR2(inputfile, Genetic_Codes):
-    "Parity rule 2 (PR2) analysis."
+    """
+    Parity rule 2 (PR2) analysis.
+    """
+    
     ys = []
     xs = []
     GeneName = []
@@ -609,6 +618,10 @@ def PR2(inputfile, Genetic_Codes):
     return {"A3/(A3+T3)|4":ys, "G3/(G3+C3)|4":xs, "GeneName":GeneName}
 
 def DrawPR2(PR2Result, show_label=True):
+    """
+    Draw parity rule 2 (PR2) plot.
+    """
+    
     import matplotlib.pyplot as plt
     ys = PR2Result["A3/(A3+T3)|4"]
     xs = PR2Result["G3/(G3+C3)|4"]
