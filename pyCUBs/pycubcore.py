@@ -47,11 +47,11 @@ def GetObs(Seqs, Genetic_Codes:int, aaSeq3:bool=True):
     codontable = CodonTables().get(Genetic_Codes, aaSeq3)
     
     if isinstance(Seqs, str):
-        Seqs = [Seqs]
-        
+        Seqs = [Seqs.upper()]
+
     Codons = {}
     for Seq in Seqs:
-        
+        Seq = Seq.upper()
         # check seqence length
         if len(Seq)%3 == 1:
             Seq = Seq[:-1]
