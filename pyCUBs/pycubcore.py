@@ -6,6 +6,7 @@ __all__ = ["GetObs", "GetFranction", "GetFrequency", "GetRSCU", "DrawCodonBarplo
            "NPA", "DrawNPA", "GetNC", "GetGC3s", "ENC", "DrawENC", "Find4Dtv", "GetPR2", "PR2", "DrawPR2"]
 __version__ = "v0.01"
 
+
 from fastaio import FastaIO
 from codontables import CodonTables
 
