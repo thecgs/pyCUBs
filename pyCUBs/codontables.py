@@ -493,14 +493,14 @@ class CodonTables:
         self.Tables = Tables
         self.Seq3toSeq1 = Seq3toSeq1
         
-    def get(self, value, aaSeq3=True):
+    def get(self, value, aaseq3=True):
         if (value in self.IDs):
-            if aaSeq3:
+            if aaseq3:
                 return self.Tables[self.IDs.index(value)]
             else:
                 return self._aaSeq3toSeq1(self.Tables[self.IDs.index(value)])
         elif (value in self.Names):
-            if aaSeq3:
+            if aaseq3:
                 return self.Tables[self.Names.index(value)]
             else:
                 return self._aaSeq3toSeq1(self.Tables[self.Names.index(value)])
