@@ -1,14 +1,11 @@
-# pyCUBs: Codon Usage Bias，CUB base on python 这个库主要是研究密码子偏好性
+# pyCUBs: Codon Usage Bias，CUB base on python
 
-## 已经开发和计划开发的功能列表
+## List of features that have been developed and are planned to be developed
 
 [Done] Observed number of occurrences of codon (Obs) analysis
 
 
 [Done] Stat frequency of cusp software. cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
-
-
-[Done] Stat frequency of cusp software.
 
 
 [Done] Relative synonymous codon usage (RSCU) analysis
@@ -32,19 +29,19 @@
 [Done part] codonW sortware anslysis
 
 
-[Plan] Codon Bias Index
+[Plan] CAI analysis
+
+
+[Plan] Codon Bias Index (CBI)
 
 
 [Plan] Frequency of OPtimal codons
 
 
-[Plan] CAI analysis
-
-
 [Plan] Corresponding analysis (COA)
 
 
-## 依赖和测试环境
+## Dependencies and test environment
 
 scipy >= v1.11.4
 
@@ -60,41 +57,41 @@ matplotlib >= v3.8.2
 
 python >= v3.11.5
 
-## 测试数据
+## test data
 
-Min.mt.fasta 数据来自这篇论文蔡元保, 杨祥燕. 澳洲坚果光壳种叶绿体基因组的密码子使用偏好性及其影响因素分析[J]. 植物科学学报, 2022, 40(2): 229-239. DOI: 10.11913/PSJ.2095-0837.2022.20229
+Min.mt.fasta data from https://plantscience.cn/cn/article/doi/10.11913/PSJ.2095-0837.2022.20229
 
 
 ```python
-## 导入库
 import sys
-sys.path.append('/mnt/nfs1/jupyter/pyCUBs/pyCUBs/') # 库的路径
+sys.path.append('/mnt/nfs1/jupyter/pyCUBs/pyCUBs/') # import library path
 import pycubcore
 
-## 切换测试工作路径, 导入测试数据
+# Switch the test work path and import test data
 import os
 os.chdir('/mnt/nfs1/jupyter/pyCUBs/')
 inputfile = "./test_data/Min.mt.fasta"
 
-## 模块介绍
+# Module Introduction
 """
-├── codontables.py  # 密码子表模块
-├── fastaio.py      # Fasta IO 模块
-└── pycubcore.py    # CUB 核心计算模块
+├── codontables.py  # Codon table module
+├── fastaio.py      # Fasta IO module
+└── pycubcore.py    # CUB Core computing module
 """
+
 import codontables
-print("\n可用的遗传密码子表：\n",codontables.CodonTables())
+print("\nTable of available genetic codons:\n",codontables.CodonTables())
 import fastaio
 help(fastaio.FastaIO)
 
-## 库的一些信息
+# Some information about the library
 print(pycubcore.__author__)
-print("pycubcore的函数：", pycubcore.__all__)
-print("版本号：",pycubcore.__version__)
+print("pycubcore function: ", pycubcore.__all__)
+print("version: ",pycubcore.__version__)
 ```
 
     
-    可用的遗传密码子表：
+    Table of available genetic codons:
      Reference website: https://www.ncbi.nlm.nih.gov/Taxonomy/taxonomyhome.html/index.cgi?chapter=tgencodes
     
     Translate Tables/Genetic Codes:
@@ -131,15 +128,17 @@ print("版本号：",pycubcore.__version__)
         or accept a handle of "_io.TextIOWrapper" class.
     
     Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2024/05/17
-    pycubcore的函数： ['GetObs', 'GetFranction', 'GetFrequency', 'GetRSCU', 'DrawCodonBarplot', 'GetCusp', 'GetcodonW', 'NPA', 'DrawNPA', 'GetNC', 'GetGC3s', 'ENC', 'DrawENC', 'Find4Dtv', 'GetPR2', 'PR2', 'DrawPR2']
-    版本号： v0.01
+    pycubcore function:  ['GetObs', 'GetFranction', 'GetFrequency', 'GetRSCU', 'DrawCodonBarplot', 'GetCusp', 'GetcodonW', 'NPA', 'DrawNPA', 'GetNC', 'GetGC3s', 'ENC', 'DrawENC', 'Find4Dtv', 'GetPR2', 'PR2', 'DrawPR2']
+    version:  v0.01
 
 
 
 ```python
 ## example1: Effective number of codons (ENC) analysis
-ENCResult = pycubcore.ENC(inputfile, Genetic_Codes=16) #Genetic_Codes=16 选择遗传密码子表16 植物叶绿体
-pycubcore.DrawENC(ENCResult)
+#help(pycubcore.ENC)
+ENCResult = pycubcore.ENC(inputfile, genetic_codes=16) #Genetic_Codes=16, Selected genetic codon table 16 Plant chloroplasts
+#help(pycubcore.DrawENC)
+pycubcore.DrawENC(ENCResult, show_gene_name=False)
 ```
 
 
@@ -151,8 +150,10 @@ pycubcore.DrawENC(ENCResult)
 
 ```python
 # example2: Parity rule 2 (PR2) analysis.
-PR2Result = pycubcore.PR2(inputfile, Genetic_Codes=16)
-pycubcore.DrawPR2(PR2Result, show_label=True) #展示gene name
+# help(pycubcore.PR2)
+PR2Result = pycubcore.PR2(inputfile, genetic_codes=16)
+# help(pycubcore.DrawPR2)
+pycubcore.DrawPR2(PR2Result, show_gene_name=True) #Show gene name
 ```
 
 
@@ -164,8 +165,8 @@ pycubcore.DrawPR2(PR2Result, show_label=True) #展示gene name
 
 ```python
 # example3: Neutral plot analysis.
-NPAResult = pycubcore.NPA(inputfile, Genetic_Codes=16)
-pycubcore.DrawNPA(NPAResult, show_label=True) #展示gene name
+NPAResult = pycubcore.NPA(inputfile, genetic_codes=16)
+pycubcore.DrawNPA(NPAResult, show_gene_name=True)
 ```
 
 
@@ -176,31 +177,31 @@ pycubcore.DrawNPA(NPAResult, show_label=True) #展示gene name
 
 
 ```python
-# example4: 计算 Obs, Franction, Frequency, RSCU
+# example4: compute Obs, Franction, Frequency, RSCU
 GeneName, Seqence = next(fastaio.FastaIO(inputfile))
-print("输入的序列：\n")
+print("input seqence:\n")
 print(">"+GeneName+"\n", Seqence, sep="")
 
-# 计算
-Obs = pycubcore.GetObs(Seqs=Seqence, Genetic_Codes=1) #Seqs这个参数可以是一个基因序列的string， 也可以是list, 如一个叶绿体的所以CDS序列的list, 从而计算整个物中Obs
+# Calculate
+Obs = pycubcore.GetObs(seqences=Seqence, genetic_codes=1) #The seqences parameter can be a string of gene sequence or a list. For example, a list of all CDS sequences of a chloroplast, so as to calculate the Obs in the whole organism
 Franction=pycubcore.GetFranction(Obs)
 Frequency=pycubcore.GetFrequency(Obs)
 RSCU=pycubcore.GetRSCU(Obs)
 
-# 可视化
-print("\n可视化：\n")
-pycubcore.DrawCodonBarplot(Obs, data_type="Number")
-pycubcore.DrawCodonBarplot(Franction, data_type="Franction")
-pycubcore.DrawCodonBarplot(Frequency, data_type="Frequency")
-pycubcore.DrawCodonBarplot(RSCU, data_type="RSCU")
+# Visualization
+print("\nVisualization result：\n")
+pycubcore.DrawCodonBarplot(Obs, ylabel="Number")
+pycubcore.DrawCodonBarplot(Franction, ylabel="Franction")
+pycubcore.DrawCodonBarplot(Frequency, ylabel="Frequency")
+pycubcore.DrawCodonBarplot(RSCU, ylabel="RSCU")
 ```
 
-    输入的序列：
+    input seqence:
     
     >psbA
     ATGACTGCAATTTTAGAGAGACGCGAAAGCGAAAGCCTATGGGGTCGCTTCTGTAACTGGATAACCAGCACTGAGAACCGTCTTTACATTGGATGGTTTGGTGTTTTGATGATCCCTACCTTATTGACCGCAACTTCTGTATTTATTATCGCCTTCATTGCTGCTCCTCCAGTAGATATTGATGGTATTCGTGAACCTGTTTCTGGGTCTCTACTTTACGGAAACAATATTATCTCTGGTGCCATTATTCCTACTTCTGCAGCTATAGGATTGCACTTTTACCCGATATGGGAAGCGGCATCCGTTGATGAATGGTTATACAATGGTGGTCCTTATGAATTGATTGTTCTACACTTCTTACTTGGTGTAGCTTCTTACATGGGTCGTGAGTGGGAACTAAGTTTCCGTCTGGGTATGCGCCCTTGGATTGCTGTTGCATATTCAGCTCCTGTTGCAGCTGCAACTGCTGTTTTCTTGATCTACCCAATCGGTCAAGGAAGCTTCTCTGATGGTATGCCCCTAGGAATCTCTGGTACTTTCAACTTCATGATTGTATTCCAGGCTGAGCACAACATTCTTATGCACCCATTTCACATGTTAGGTGTGGCTGGTGTATTCGGCGGCTCCCTATTCAGTGCTATGCATGGTTCCTTGGTAACTTCAAGTTTGATCAGGGAAACCACTGAAAATGAATCTGCTAATGAAGGTTACAGATTCGGTCAAGAGGAAGAAACTTATAATATCGTAGCTGCTCATGGTTATTTTGGCCGATTGATCTTCCAATATGCTAGTTTCAACAATTCTCGTTCTTTACATTTCTTCCTAGCTGCTTGGCCTGTAGTAGGTATCTGGTTCACTGCTTTAGGTATTAGTACCATGGCTTTCAACCTAAATGGTTTCAATTTCAACCAATCCGTAGTTGACAGTCAAGGTCGTGTAATTAACACTTGGGCTGATATCATCAACCGTGCTAACCTTGGTATGGAAGTTATGCATGAACGTAATGCTCACAACTTCCCTCTAGACCTAGCTGCTGTTGAAGCTCCATCCATAAATGGATAA
     
-    可视化：
+    Visualization result：
     
 
 
@@ -230,26 +231,26 @@ pycubcore.DrawCodonBarplot(RSCU, data_type="RSCU")
 
 
 ```python
-# example5: 获得Cusp类似的结果
+# example5: Get similar results to Cusp software
 # Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
 
 GeneName, Seqence = next(fastaio.FastaIO(inputfile))
-print("输入的序列：\n")
+print("Input seqence: \n")
 print(">"+GeneName+"\n", Seqence, sep="")
 print("\n")
 
-Obs = pycubcore.GetObs(Seqs=Seqence, Genetic_Codes=1) 
-print("Cusp结果：\n")
-print(pycubcore.GetCusp(Obs, human_format=True)) #human_format=True 人类可阅读的输出，否则是机器可读
+Obs = pycubcore.GetObs(seqences=Seqence, genetic_codes=1) 
+print("Cusp result: \n")
+print(pycubcore.GetCusp(Obs, human_format=True)) #human_format=True, Human-readable output, otherwise machine-readable.
 ```
 
-    输入的序列：
+    Input seqence: 
     
     >psbA
     ATGACTGCAATTTTAGAGAGACGCGAAAGCGAAAGCCTATGGGGTCGCTTCTGTAACTGGATAACCAGCACTGAGAACCGTCTTTACATTGGATGGTTTGGTGTTTTGATGATCCCTACCTTATTGACCGCAACTTCTGTATTTATTATCGCCTTCATTGCTGCTCCTCCAGTAGATATTGATGGTATTCGTGAACCTGTTTCTGGGTCTCTACTTTACGGAAACAATATTATCTCTGGTGCCATTATTCCTACTTCTGCAGCTATAGGATTGCACTTTTACCCGATATGGGAAGCGGCATCCGTTGATGAATGGTTATACAATGGTGGTCCTTATGAATTGATTGTTCTACACTTCTTACTTGGTGTAGCTTCTTACATGGGTCGTGAGTGGGAACTAAGTTTCCGTCTGGGTATGCGCCCTTGGATTGCTGTTGCATATTCAGCTCCTGTTGCAGCTGCAACTGCTGTTTTCTTGATCTACCCAATCGGTCAAGGAAGCTTCTCTGATGGTATGCCCCTAGGAATCTCTGGTACTTTCAACTTCATGATTGTATTCCAGGCTGAGCACAACATTCTTATGCACCCATTTCACATGTTAGGTGTGGCTGGTGTATTCGGCGGCTCCCTATTCAGTGCTATGCATGGTTCCTTGGTAACTTCAAGTTTGATCAGGGAAACCACTGAAAATGAATCTGCTAATGAAGGTTACAGATTCGGTCAAGAGGAAGAAACTTATAATATCGTAGCTGCTCATGGTTATTTTGGCCGATTGATCTTCCAATATGCTAGTTTCAACAATTCTCGTTCTTTACATTTCTTCCTAGCTGCTTGGCCTGTAGTAGGTATCTGGTTCACTGCTTTAGGTATTAGTACCATGGCTTTCAACCTAAATGGTTTCAATTTCAACCAATCCGTAGTTGACAGTCAAGGTCGTGTAATTAACACTTGGGCTGATATCATCAACCGTGCTAACCTTGGTATGGAAGTTATGCATGAACGTAATGCTCACAACTTCCCTCTAGACCTAGCTGCTGTTGAAGCTCCATCCATAAATGGATAA
     
     
-    Cusp结果：
+    Cusp result: 
     
     #Coding GC 42.84%
     #1st letter GC 50.0%
@@ -324,24 +325,24 @@ print(pycubcore.GetCusp(Obs, human_format=True)) #human_format=True 人类可阅
 
 
 ```python
-# example6: 获得 codonW 软件类似的结果
+# example6: Get similar results to codonW software.
 GeneName, Seqence = next(fastaio.FastaIO(inputfile))
-print("输入的序列：\n")
+print("Input seqence: \n")
 print(">"+GeneName+"\n", Seqence, sep="")
 print("\n")
 
-Obs = pycubcore.GetObs(Seqs=Seqence, Genetic_Codes=16) 
-print("Cusp结果：\n")
-print(pycubcore.GetcodonW(Obs, human_format=True)) #human_format=True 人类可阅读的输出，否则是机器可读
+Obs = pycubcore.GetObs(seqences=Seqence, genetic_codes=16)
+print("codonW result: \n")
+print(pycubcore.GetcodonW(Obs, human_format=True)) #human_format=True, Human-readable output, otherwise machine-readable.
 ```
 
-    输入的序列：
+    Input seqence: 
     
     >psbA
     ATGACTGCAATTTTAGAGAGACGCGAAAGCGAAAGCCTATGGGGTCGCTTCTGTAACTGGATAACCAGCACTGAGAACCGTCTTTACATTGGATGGTTTGGTGTTTTGATGATCCCTACCTTATTGACCGCAACTTCTGTATTTATTATCGCCTTCATTGCTGCTCCTCCAGTAGATATTGATGGTATTCGTGAACCTGTTTCTGGGTCTCTACTTTACGGAAACAATATTATCTCTGGTGCCATTATTCCTACTTCTGCAGCTATAGGATTGCACTTTTACCCGATATGGGAAGCGGCATCCGTTGATGAATGGTTATACAATGGTGGTCCTTATGAATTGATTGTTCTACACTTCTTACTTGGTGTAGCTTCTTACATGGGTCGTGAGTGGGAACTAAGTTTCCGTCTGGGTATGCGCCCTTGGATTGCTGTTGCATATTCAGCTCCTGTTGCAGCTGCAACTGCTGTTTTCTTGATCTACCCAATCGGTCAAGGAAGCTTCTCTGATGGTATGCCCCTAGGAATCTCTGGTACTTTCAACTTCATGATTGTATTCCAGGCTGAGCACAACATTCTTATGCACCCATTTCACATGTTAGGTGTGGCTGGTGTATTCGGCGGCTCCCTATTCAGTGCTATGCATGGTTCCTTGGTAACTTCAAGTTTGATCAGGGAAACCACTGAAAATGAATCTGCTAATGAAGGTTACAGATTCGGTCAAGAGGAAGAAACTTATAATATCGTAGCTGCTCATGGTTATTTTGGCCGATTGATCTTCCAATATGCTAGTTTCAACAATTCTCGTTCTTTACATTTCTTCCTAGCTGCTTGGCCTGTAGTAGGTATCTGGTTCACTGCTTTAGGTATTAGTACCATGGCTTTCAACCTAAATGGTTTCAATTTCAACCAATCCGTAGTTGACAGTCAAGGTCGTGTAATTAACACTTGGGCTGATATCATCAACCGTGCTAACCTTGGTATGGAAGTTATGCATGAACGTAATGCTCACAACTTCCCTCTAGACCTAGCTGCTGTTGAAGCTCCATCCATAAATGGATAA
     
     
-    Cusp结果：
+    codonW result: 
     
     T3s    C3s    A3s    G3s    Nc     GC3s   GC     L_sym  L_aa  
     0.5033 0.2730 0.2964 0.0901 43.01  0.311  0.430  331    353   
