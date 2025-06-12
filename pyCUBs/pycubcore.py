@@ -413,11 +413,22 @@ def NPA(inputfile, genetic_codes, sym=True):
                     ATGC3.setdefault(Codon[2], Obs[Acid][Codon])
                 else:
                     ATGC3[Codon[2]] += Obs[Acid][Codon]
-
-        GC1= ATGC1.get('G', 0)/sum(ATGC1.values()) + ATGC1.get('C', 0)/sum(ATGC1.values())     
-        GC2= ATGC2.get('G', 0)/sum(ATGC2.values()) + ATGC2.get('C', 0)/sum(ATGC2.values())     
-        GC3= ATGC3.get('G', 0)/sum(ATGC3.values()) + ATGC3.get('C', 0)/sum(ATGC3.values())
-        GC12 = (GC1 + GC2)/2
+        if sum(ATGC1.values()) !=0:
+            GC1= ATGC1.get('G', 0)/sum(ATGC1.values()) + ATGC1.get('C', 0)/sum(ATGC1.values())
+        else:
+            GC1 = None
+        if sum(ATGC2.values()):
+            GC2= ATGC2.get('G', 0)/sum(ATGC2.values()) + ATGC2.get('C', 0)/sum(ATGC2.values())     
+        else:
+            GC2 = None
+        if sum(ATGC3.values()):
+            GC3= ATGC3.get('G', 0)/sum(ATGC3.values()) + ATGC3.get('C', 0)/sum(ATGC3.values())
+        else:
+            GC3 = None
+        if GC1 !=None and GC2 !=None:
+            GC12 = (GC1 + GC2)/2
+        else:
+            GC12 = None
         return {"GC1":GC1, "GC2":GC2, "GC12":GC12, "GC3":GC3}
 
     GC12 = []
@@ -426,10 +437,11 @@ def NPA(inputfile, genetic_codes, sym=True):
     for ID, Seq in FastaIO(inputfile):
         Obs = GetObs(seqences=Seq, genetic_codes=genetic_codes)
         res = GC123(Obs, sym)
-        GC12.append(res["GC12"])
-        GC3.append(res["GC3"])
-        GeneName.append(ID)
-
+        if res["GC1"] !=None and res["GC2"] !=None and res["GC12"] !=None and res["GC3"] !=None:
+           GC12.append(res["GC12"])
+           GC3.append(res["GC3"])
+           GeneName.append(ID)
+    
     PearsonRResult = ss.pearsonr(GC3, GC12)
     R = PearsonRResult[0]
     P = PearsonRResult[1]
@@ -505,7 +517,7 @@ def GetNC(Obs):
     """
     Description: 
     
-        The effective number of codons (NC) (Wright 1990). 
+        The effective number of codons (NC) (Wright 1990).
         
     Optional:
         
@@ -527,8 +539,11 @@ def GetNC(Obs):
                 if n-1 != 0:
                     F = (n*S-1)/(n-1)
                     Fs.append(F)
+            #Fs = list(filter(lambda x: x!=0, Fs))
+            if Fs == []:
+                Fs = None
             return Fs
-
+    
     Obs1 = Obs.copy()
     del Obs1["*"]
     
@@ -559,13 +574,19 @@ def GetNC(Obs):
     
     Fxmeans = []
     for Fx in Fxs:
-        Fxmeans.append(sum(Fx)/len(Fx) if Fx != None else None)
-    
+        Fxmeans.append(sum(Fx)/len(list(filter(lambda x: x!=0, Fx))) if (Fx != None and len(list(filter(lambda x: x!=0, Fx)))!=0) else None)
+    if (Fxmeans[1] == None) or (Fxmeans[1] == 0):
+        try:
+            Fxmeans[1] = (Fxmeans[0] + Fxmeans[2])/2
+        except:
+            return None
     Total = [len(F1_Obs)]
     for FxObs, Fxmean in zip(Fx_Obs, Fxmeans):
-        Total.append(len(FxObs)/Fxmean if Fxmean !=None else 0)
+        Total.append(len(FxObs)/Fxmean if (Fxmean !=None) else 0)
         
     ENC = sum(Total)
+    if ENC > 61 or ENC < 20:
+        ENC = None
     return ENC
 
 def GetGC3s(Obs):
@@ -589,7 +610,10 @@ def GetGC3s(Obs):
                 ATGC3s.setdefault(Codon[2], Obs[Acid][Codon])
             else:
                 ATGC3s[Codon[2]] += Obs[Acid][Codon]
-    GC3s= ATGC3s.get('G', 0)/sum(ATGC3s.values()) + ATGC3s.get('C', 0)/sum(ATGC3s.values())
+    if sum(ATGC3s.values()) != 0:
+        GC3s= ATGC3s.get('G', 0)/sum(ATGC3s.values()) + ATGC3s.get('C', 0)/sum(ATGC3s.values())
+    else:
+        GC3s = None
     return GC3s
 
 def ENC(inputfile, genetic_codes):
@@ -609,7 +633,10 @@ def ENC(inputfile, genetic_codes):
     for ID, Seq in FastaIO(inputfile):
         Obs = GetObs(seqences=Seq, genetic_codes=genetic_codes)
         xs.append(GetGC3s(Obs))
-        ys.append(GetNC(Obs))
+        try:
+            ys.append(GetNC(Obs))
+        except:
+            print(ID)
         GeneName.append(ID)
     return {"GC3s":xs, "ENC":ys, "GeneName":GeneName}
 
@@ -715,13 +742,25 @@ def GetPR2(Obs):
                 ATGC3_4d.setdefault(Codon[2], Obs[Acid][Codon])
             else:
                 ATGC3_4d[Codon[2]] += Obs[Acid][Codon]
-                    
-    A3_4d = ATGC3_4d.get('A', 0)/sum(ATGC3_4d.values())
-    T3_4d = ATGC3_4d.get('T', 0)/sum(ATGC3_4d.values())
-    G3_4d = ATGC3_4d.get('G', 0)/sum(ATGC3_4d.values())
-    C3_4d = ATGC3_4d.get('C', 0)/sum(ATGC3_4d.values())
-    AT3_bias_4d =A3_4d/(A3_4d+T3_4d)
-    GC3_bias_4d =G3_4d/(G3_4d+C3_4d)
+    if sum(ATGC3_4d.values()) != 0:                
+        A3_4d = ATGC3_4d.get('A', 0)/sum(ATGC3_4d.values())
+        T3_4d = ATGC3_4d.get('T', 0)/sum(ATGC3_4d.values())
+        G3_4d = ATGC3_4d.get('G', 0)/sum(ATGC3_4d.values())
+        C3_4d = ATGC3_4d.get('C', 0)/sum(ATGC3_4d.values())
+    else:
+        A3_4d = 0
+        T3_4d = 0
+        G3_4d = 0
+        C3_4d = 0
+    
+    if A3_4d+T3_4d != 0:
+        AT3_bias_4d =A3_4d/(A3_4d+T3_4d)
+    else:
+        AT3_bias_4d = None
+    if G3_4d+C3_4d != 0:
+        GC3_bias_4d =G3_4d/(G3_4d+C3_4d)
+    else:
+        GC3_bias_4d = None
     return {"A3/(A3+T3)|4": AT3_bias_4d, "G3/(G3+C3)|4": GC3_bias_4d}
  
 def PR2(inputfile, genetic_codes):
