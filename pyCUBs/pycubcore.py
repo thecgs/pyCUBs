@@ -3,7 +3,7 @@
 
 __author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2024/05/17"
 __all__ = ["GetObs", "GetFranction", "GetFrequency", "GetRSCU", "DrawCodonBarplot", "GetCusp", "GetcodonW", 
-           "NPA", "DrawNPA", "GetNC", "GetGC3s", "ENC", "DrawENC", "Find4Dtv", "GetPR2", "PR2", "DrawPR2"]
+           "NPA", "DrawNPA", "GetNC", "GetGC3s", "ENC", "DrawENC", "Find4Dtv", "GetPR2", "PR2", "DrawPR2", "GetCoaRSCU", "DrawCoaRSCU"]
 __version__ = "v0.01"
 
 
@@ -838,3 +838,212 @@ def DrawPR2(PR2Result, show_gene_name=False, gene_name_size=10,
                 if l in show_gene_name:
                     plt.text(x, y, l, c=gene_name_color, size=gene_name_size)
     return None
+    
+    
+def GetCoaRSCU(data, genetic_codes):
+    """
+    Description: 
+        Return Correspondence analysis of RSCU calculate result.
+        
+    Optional:
+        
+        data: [("species name", "cds file path"), ...]
+        genetic_codes: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+    """
+    
+    import pandas as pd
+    import prince
+    
+    RSCU_df_dict = {}
+    for prefix, file in data:
+        RSCU = GetRSCU(GetObs(file, genetic_codes=genetic_codes))
+        del RSCU["*"]
+        Codon2RSCU = {}
+        for Acid in RSCU:
+            for Codon in RSCU[Acid]:
+                Codon2RSCU.setdefault(Codon, RSCU[Acid][Codon])
+        RSCU_df_dict.setdefault(prefix, Codon2RSCU)
+    
+    RSCU_df = pd.DataFrame(RSCU_df_dict)
+    ca = prince.CA(n_components=2)
+    ca = ca.fit(RSCU_df)
+    
+    Codon2Acid = {}
+    for Acid in RSCU:
+        for Codon in RSCU[Acid]:
+            Codon2Acid.setdefault(Codon, Acid)
+    return RSCU_df, Codon2Acid, ca
+ 
+
+def DrawCoaRSCU(CoaResult, figsize=(8,8), species_labels_color="black", species_labels_style="italic", species_labels_size = 8, species_shapes_color = None, species_shapes_size = 200, species_labels_ha = "left", species_labels_va = "bottom", codon_labels_color = "black", codon_labels_size = 8, codon_shapes_size = 100, codon_labels_ha = "left", codon_labels_va = "bottom", show_species_label = True, show_codon_label = True):
+    """
+    Description: 
+    
+    Draw CoA plot.
+    
+    Optional:
+    
+        CoaResult: GetCoaRSCU function return value.
+        show_species_label: {bool, ["species1", "species2", ...]} show species name in plot.
+        show_codon_label: {bool, ["codon1", "codon2", ...]} show codon in plot.
+        figsize: (8,8)
+        species_labels_color: "black"
+        species_labels_style: "italic"
+        species_labels_size: 8,
+        species_shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
+        species_shapes_size: 200,
+        species_labels_ha: {"left", "right", "top", "bottom", "center"}
+        species_labels_va: {"left", "right", "top", "bottom", "center"}
+        codon_labels_color: "black",
+        codon_labels_size: 8,
+        codon_shapes_size: 100,
+        codon_labels_ha: {"left", "right", "top", "bottom", "center"}
+        codon_labels_va: {"left", "right", "top", "bottom", "center"}
+     """
+    
+    import matplotlib.pyplot as plt
+    AcidColor={"Gly": ("#4DBBD5FF", "o", "Nonpolar"),
+               "Ala": ("#4DBBD5FF", "v", "Nonpolar"),
+               "Val": ("#4DBBD5FF", "^", "Nonpolar"),
+               "Leu": ("#4DBBD5FF", "<", "Nonpolar"),
+               "Ile": ("#4DBBD5FF", ">", "Nonpolar"),
+               "Phe": ("#4DBBD5FF", "s", "Nonpolar"),
+               "Pro": ("#4DBBD5FF", "p", "Nonpolar"),
+               "Met": ("#4DBBD5FF", "d", "Nonpolar"),
+               "Trp": ("#4DBBD5FF", "+", "Nonpolar"),
+               "Ser": ("#F39B7FFF", "o", "Polar"), 
+               "Thr": ("#F39B7FFF", "s", "Polar"), 
+               "Cys": ("#F39B7FFF", "p", "Polar"), 
+               "Asn": ("#F39B7FFF", "+", "Polar"), 
+               "Gln": ("#F39B7FFF", "d", "Polar"), 
+               "Tyr": ("#F39B7FFF", "^", "Polar"), 
+               "Asp": ("#8491B4FF", "o", "Acidic"),
+               "Glu": ("#8491B4FF", "s", "Acidic"),
+               "Lys": ("#91D1C2FF", "o", "Basic"), 
+               "Arg": ("#91D1C2FF", "s", "Basic"), 
+               "His": ("#91D1C2FF", "p", "Basic")  
+    }
+    
+    RSCU_df, Codon2Acid, ca = CoaResult
+            
+    row_coords = ca.row_coordinates(RSCU_df)
+    col_coords = ca.column_coordinates(RSCU_df)
+    
+    # Plotting the results
+    plt.figure(figsize=figsize)
+    
+    # Adding labels
+    #texts = []
+    if show_codon_label !=None and show_codon_label !=False:
+        if isinstance(show_codon_label, list):
+            for i, codon in enumerate(RSCU_df.index):
+                if codon in show_codon_label:
+                    text = plt.annotate(codon, 
+                                        (row_coords[0][i], row_coords[1][i]), 
+                                        color=codon_labels_color, 
+                                        fontsize=codon_labels_size, 
+                                        ha=codon_labels_ha, va=codon_labels_va)
+                    #texts.append(text)
+                    
+        else:
+            for i, codon in enumerate(RSCU_df.index):
+                text = plt.annotate(codon, 
+                                    (row_coords[0][i], row_coords[1][i]), 
+                                    color=codon_labels_color,
+                                    fontsize=codon_labels_size, 
+                                    ha=codon_labels_ha, va=codon_labels_va)
+                #texts.append(text)
+    
+    if show_species_label != None and show_species_label !=False:
+        if isinstance(show_species_label, list):
+            for i, spceies in enumerate(RSCU_df.columns):
+                if spceies in show_species_label:
+                    text = plt.annotate(spceies, 
+                                 (col_coords[0][i], col_coords[1][i]), 
+                                 color=species_labels_color, 
+                                 fontsize=species_labels_size, style = species_labels_style,
+                                 ha = species_labels_ha, va = species_labels_va)
+                    #texts.append(text)
+        else:
+            for i, spceies in enumerate(RSCU_df.columns):
+                text = plt.annotate(spceies, 
+                                    (col_coords[0][i], col_coords[1][i]), 
+                                    color=species_labels_color,
+                                    fontsize=species_labels_size,
+                                    ha = species_labels_ha, va = species_labels_va)
+                #texts.append(text)
+    #from adjustText import adjust_text
+    #adjust_text(texts, 
+    #            arrowprops=dict(arrowstyle='->', color='blue'),
+    #            expand_points=(1.2, 1.5),
+    #            force_text=0.5,
+    #            precision=0.01)
+
+    Acid_tmp = []
+    Acid_handle = {}
+    for i in range(0,len(row_coords)):
+        P = plt.scatter(row_coords[0][i], 
+                        row_coords[1][i], 
+                        c=AcidColor[Codon2Acid[row_coords.index[i]]][0], 
+                        label=f"{Codon2Acid[row_coords.index[i]]} / {AcidColor[Codon2Acid[row_coords.index[i]]][2]}", 
+                        marker=AcidColor[Codon2Acid[row_coords.index[i]]][1],
+                        s=codon_shapes_size)
+        if Codon2Acid[row_coords.index[i]] not in Acid_tmp:
+            Acid_tmp.append(Codon2Acid[row_coords.index[i]])
+            Acid_handle.setdefault(Codon2Acid[row_coords.index[i]], P)
+
+    Ps_list = []
+    for i in range(0, len(col_coords)):
+        if isinstance(species_shapes_color, dict):
+            Ps = plt.scatter(col_coords[0][i], col_coords[1][i], 
+                c=species_shapes_color.get(col_coords.index[i],"#E64B35FF"), 
+                             label=col_coords.index[i],
+                marker="*", s=species_shapes_size)
+            Ps_list.append(Ps)
+        else:
+            Ps = plt.scatter(col_coords[0][i], col_coords[1][i], 
+                        c='#E64B35FF', label='Species', 
+                        marker="*", s=species_shapes_size)
+            
+    # Adding legend
+    if isinstance(species_shapes_color, dict):
+        plt.legend(
+            handles=[Acid_handle["Gly"], Acid_handle["Ala"], Acid_handle["Val"], 
+                     Acid_handle["Leu"], Acid_handle["Ile"], Acid_handle["Phe"],
+                     Acid_handle["Pro"], Acid_handle["Met"], Acid_handle["Trp"],
+                     Acid_handle["Ser"], Acid_handle["Thr"], Acid_handle["Cys"], 
+                     Acid_handle["Asn"], Acid_handle["Gln"], Acid_handle["Tyr"],
+                     Acid_handle["Asp"], Acid_handle["Glu"], Acid_handle["Lys"],
+                     Acid_handle["Arg"], Acid_handle["His"], *tuple(Ps_list)],
+            loc='upper left', 
+            bbox_to_anchor=(1, 1),
+            ncol=1,
+            frameon=False,
+            shadow=False,
+            title='',
+        )
+    else:
+        plt.legend(
+            handles=[Acid_handle["Gly"], Acid_handle["Ala"], Acid_handle["Val"], 
+                     Acid_handle["Leu"], Acid_handle["Ile"], Acid_handle["Phe"],
+                     Acid_handle["Pro"], Acid_handle["Met"], Acid_handle["Trp"],
+                     Acid_handle["Ser"], Acid_handle["Thr"], Acid_handle["Cys"], 
+                     Acid_handle["Asn"], Acid_handle["Gln"], Acid_handle["Tyr"],
+                     Acid_handle["Asp"], Acid_handle["Glu"], Acid_handle["Lys"],
+                     Acid_handle["Arg"], Acid_handle["His"], Ps],
+            loc='upper left', 
+            bbox_to_anchor=(1, 1),
+            ncol=1,
+            frameon=False,
+            shadow=False,
+            title=''
+        )
+    
+    plt.title('Correspondence analysis of RSCU', size=12)
+    plt.xlabel(f'Dimension 1 ({ca.eigenvalues_summary.iloc[0,1]})', size=12)
+    plt.ylabel(f'Dimension 2 ({ca.eigenvalues_summary.iloc[1,1]})', size=12)
+    return None
+
+
+      
+ 
