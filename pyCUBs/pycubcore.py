@@ -4,7 +4,7 @@
 __author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2024/05/17"
 __all__ = ["translate", "GetObs", "GetFranction", "GetFrequency", "GetRSCU", "DrawCodonBarplot", "GetCusp", "GetcodonW", 
            "NPA", "DrawNPA", "GetNC", "GetGC3s", "ENC", "DrawENC", "Find4Dtv", "GetPR2", "PR2", "DrawPR2",
-            "GetCoaRSCU", "DrawCoaRSCU", "GetCoaAminoAcidComposition", "DrawCoaAminoAcidComposition"]
+            "GetCoaRSCU", "DrawCoaRSCU", "GetCoaAminoAcidComposition", "DrawCoaAminoAcidComposition", "GetPCARSCU", "GetCoaAminoAcidComposition", "DrawPCA"]
 __version__ = "v0.01"
 
 
@@ -1072,6 +1072,7 @@ def DrawCoaRSCU(CoaResult, figsize=(8,8),
                             (col_coords[0][i], col_coords[1][i]), 
                             color=species_labels_color,
                             fontsize=species_labels_size,
+                            style = species_labels_style,
                             ha = species_labels_ha,
                             va = species_labels_va)
                 
@@ -1180,8 +1181,8 @@ def DrawCoaAminoAcidComposition(CoaAminoAcidCompositionResult,
                                 amino_acid_shapes_size = 100,
                                 amino_acid_labels_ha = "left",
                                 amino_acid_labels_va = "bottom",
-                                show_species_label = True,
-                                show_amino_acid_label = True,
+                                show_species_labels = True,
+                                show_amino_acid_labels = True,
                                 title = None,
                                 xlabel = None,
                                 ylabel = None,
@@ -1192,13 +1193,13 @@ def DrawCoaAminoAcidComposition(CoaAminoAcidCompositionResult,
     """
     Description: 
     
-    Draw CoA plot.
+    Draw correspondence analysis of amino acid composition plot.
     
     Optional:
     
         CoaResult: GetCoaRSCU function return value.
-        show_species_label: {bool, ["species1", "species2", ...]} show species name in plot.
-        show_amino_acid_label: {bool, ["codon1", "codon2", ...]} show amino acid in plot.
+        show_species_labels: {bool, ["species1", "species2", ...]} show species name in plot.
+        show_amino_acid_labels: {bool, ["codon1", "codon2", ...]} show amino acid in plot.
         figsize: (8,8)
         species_labels_color: "black"
         species_labels_style: {'normal', 'italic', 'oblique'}
@@ -1257,10 +1258,10 @@ def DrawCoaAminoAcidComposition(CoaAminoAcidCompositionResult,
         fig, ax = plt.subplots(figsize=figsize)
     
     # Adding labels
-    if show_amino_acid_label !=None and show_amino_acid_label !=False:
-        if isinstance(show_amino_acid_label, list):
+    if show_amino_acid_labels !=None and show_amino_acid_labels !=False:
+        if isinstance(show_amino_acid_labels, list):
             for i, amino_acid in enumerate(AminoAcidComposition_df.index):
-                if amino_acid in show_amino_acid_label:
+                if amino_acid in show_amino_acid_labels:
                     ax.annotate(amino_acid, 
                                 (row_coords[0][i], row_coords[1][i]), 
                                 color=amino_acid_labels_color, 
@@ -1276,10 +1277,10 @@ def DrawCoaAminoAcidComposition(CoaAminoAcidCompositionResult,
                             ha=amino_acid_labels_ha, 
                             va=amino_acid_labels_va)
     
-    if show_species_label != None and show_species_label !=False:
-        if isinstance(show_species_label, list):
+    if show_species_labels != None and show_species_labels !=False:
+        if isinstance(show_species_labels, list):
             for i, spceies in enumerate(AminoAcidComposition_df.columns):
-                if spceies in show_species_label:
+                if spceies in show_species_labels:
                     ax.annotate(spceies, 
                                 (col_coords[0][i], col_coords[1][i]), 
                                 color=species_labels_color, 
@@ -1346,3 +1347,201 @@ def DrawCoaAminoAcidComposition(CoaAminoAcidCompositionResult,
     ax.set_ylabel(ylabel, size=ylabel_size)
     return None
 
+def GetPCARSCU(data, genetic_codes):
+    """
+    Description: 
+        Return principal component analysis of RSCU calculate result.
+        
+    Optional:
+        
+        data: [("species name", "cds file path"), ...]
+        genetic_codes: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+    """
+    
+    import prince
+    import pandas as pd
+    
+    RSCU_df_dict = {}
+    for prefix, file in data:
+        RSCU = GetRSCU(GetObs(file, genetic_codes=genetic_codes))
+        del RSCU["*"]
+        Codon2RSCU = {}
+        for Acid in RSCU:
+            for Codon in RSCU[Acid]:
+                Codon2RSCU.setdefault(Codon, RSCU[Acid][Codon])
+        RSCU_df_dict.setdefault(prefix, Codon2RSCU)
+    
+    RSCU_df = pd.DataFrame(RSCU_df_dict)
+    pca = prince.PCA(n_components=2)
+    pca = pca.fit(RSCU_df)
+    
+    Codon2Acid = {}
+    for Acid in RSCU:
+        for Codon in RSCU[Acid]:
+            Codon2Acid.setdefault(Codon, Acid)
+    return RSCU_df, pca, "RSCU"
+
+def GetPCAAminoAcidComposition(data, genetic_codes):
+    """
+    Description: 
+        Return principal component analysis of amino acid composition calculate result.
+        
+    Optional:
+    
+        data: [("species name", "cds file path"), ...]
+        genetic_codes: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+    """
+    
+    
+    import prince
+    import pandas as pd
+    from collections import defaultdict
+    
+    Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
+    
+    AminoAcidComposition_df_dict = {}
+    for prefix, file in data:
+        AminoAcidComposition = defaultdict(int)
+        for ID, Seq in FastaIO(file):
+            for i in translate(CDSSeq=Seq, genetic_codes=genetic_codes):
+                AminoAcidComposition[i] = AminoAcidComposition[i] + 1
+        AminoAcidComposition_tmp_dict = {}
+        for k in AminoAcidComposition:
+            if k in Seq1toSeq3:
+                AminoAcidComposition_tmp_dict.setdefault(Seq1toSeq3[k], AminoAcidComposition[k])
+        Total = sum(AminoAcidComposition_tmp_dict.values())
+        AminoAcidComposition_tmp_dict = {k: AminoAcidComposition_tmp_dict[k]/Total for k in AminoAcidComposition_tmp_dict}
+        AminoAcidComposition_df_dict.setdefault(prefix, AminoAcidComposition_tmp_dict)
+    
+    AminoAcidComposition_df = pd.DataFrame(AminoAcidComposition_df_dict)
+    pca = prince.PCA(n_components=2)
+    pca = pca.fit(AminoAcidComposition_df)
+    return AminoAcidComposition_df, pca, "amino acid composition"
+    
+def DrawPCA(PCAResult,
+            figsize=(6,6), 
+            labels_color="black", 
+            labels_style="italic", 
+            labels_size = 8, 
+            shapes_color = '#E64B35FF', 
+            shapes_type = '*',
+            shapes_size = 100, 
+            labels_ha = "left", 
+            labels_va = "bottom",
+            title = None,
+            xlabel = None,
+            ylabel = None,
+            title_size = 12,
+            xlabel_size = 12,
+            ylabel_size = 12,
+            show_labels = True,
+            show_legend = False,
+            ax=None):
+    """
+    Description: 
+    
+    Draw Principal component analysis plot.
+    
+    Optional:
+    
+        CoaResult: GetPCARSCU or GetPCAAminoAcidComposition function return value.
+        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
+        show_legend: {bool}
+        figsize: (6,6)
+        labels_color: black
+        labels_style: {'normal', 'italic', 'oblique'}
+        labels_size: 8,
+        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
+        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
+        shapes_size: 100,
+        labels_ha: {"left", "right", "top", "bottom", "center"}
+        labels_va: {"left", "right", "top", "bottom", "center"}
+        title {None, str}
+        xlabel {None, str}
+        ylabel {None, str}
+        ax: {None, Aexs}
+     """
+    import matplotlib.pyplot as plt
+    
+    RSCU_df, pca, TYPE = PCAResult
+    def get_shape_and_color(length):
+        shapes = ["o", "s", "^", "<", ">", "v", "p", "P", "*", "h", "H", "+", "x", "X", "D", "d", "8"]
+        colors = ["#E64B35FF", "#4DBBD5FF", "#00A087FF", "#3C5488FF", "#F39B7FFF",
+         "#8491B4FF", "#91D1C2FF", "#DC0000FF", "#7E6148FF", "#B09C85FF"]
+        colors = ["#1F77B4FF", "#FF7F0EFF", "#2CA02CFF", "#D62728FF", "#9467BDFF",
+                  "#8C564BFF", "#E377C2FF", "#7F7F7FFF", "#BCBD22FF", "#17BECFFF"]
+
+        n = len(shapes) * len(colors)
+        l = []
+        for x in shapes:
+            for y in colors:
+                l.append((x, y))
+
+        res = []
+        for i in range(0, length):
+            res.append(l[i%n])
+        return res
+
+    if ax == None:
+        fig, ax = plt.subplots(figsize=figsize)
+        
+    for z, i in zip(get_shape_and_color(pca.column_correlations.shape[0]) , range(pca.column_correlations.shape[0])):
+        x = pca.column_correlations[0][i]
+        y = pca.column_correlations[1][i]
+        label = pca.column_correlations.index[i]
+        shape_type=z[0]
+        shape_color=z[1]
+        
+        if shapes_type !=None:
+            if isinstance(shapes_type, dict):
+                shape_type = shapes_type.get(label, z[0])
+            else:
+                shape_type = shapes_type
+                
+        if shapes_color !=None:
+            if isinstance(shapes_color, dict):
+                shape_color = shapes_color.get(label, z[1])
+            else:
+                shape_color = shapes_color
+        
+        ax.scatter(x,y, label=label, 
+                   marker=shape_type, 
+                   color=shape_color,
+                   s=shapes_size)
+        
+        if isinstance(show_labels, list):
+            if label in show_labels:
+                ax.annotate(label, (x,y), 
+                            color=labels_color,
+                            fontsize=labels_size,
+                            style = labels_style,
+                            ha = labels_ha,
+                            va = labels_va)
+        else:
+            if show_labels:
+                ax.annotate(label, (x,y), 
+                            color=labels_color,
+                            fontsize=labels_size,
+                            style = labels_style,
+                            ha = labels_ha,
+                            va = labels_va)
+    
+    if title == None:
+        title = f'Principal component analysis of {TYPE}'
+    if xlabel == None:
+        xlabel = f"PCA1 ({pca.eigenvalues_summary.iloc[0,1]})"
+    if ylabel == None:
+        ylabel = f"PCA2 ({pca.eigenvalues_summary.iloc[1,1]})"
+        
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    
+    if show_legend == True:
+        ax.legend(loc='center left',  
+                  bbox_to_anchor=(1, 0.5),
+                  ncol=1,
+                  frameon=False,
+                  shadow=False,
+                  title='')
+    return None
