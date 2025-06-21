@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-__author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2025/06/20"
+__author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2025/06/21"
 __all__ = ["translate", "get_Obs", "get_Franction", "get_Frequency", "get_RSCU",
            "draw_codon_barplot", "get_cusp_like", "get_codonW_like", "get_NC", "get_PR2", "get_GC123", "find_four_codon_AA",
            "NPA_analysis", "ENC_analysis", "PR2_analysis", 
-           "RSCU_analysis", "AAComposition_analysis"]
+           "RSCU_analysis", "AAComposition_analysis", "StopCodon_analysis"]
 
-__version__ = "v1.01"
+__version__ = "v2.00"
 
 import os
 import io
@@ -18,8 +18,12 @@ import seaborn as sns
 import scipy.stats as ss
 from fastaio import FastaIO
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch, Rectangle
 from collections import defaultdict
 from codontables import CodonTables, Seq3toSeq1
+from skbio import DistanceMatrix
+from skbio.tree import TreeNode, nj
+from scipy.spatial.distance import pdist, squareform
 
 def translate(cds, genetic_codes):
     """
@@ -35,8 +39,8 @@ def translate(cds, genetic_codes):
     
     protein = ""
     codotable = CodonTables().get(genetic_codes, aaseq3=False)
-    for i in range(0, len(CDSSeq), 3):
-        protein += codotable.get(CDSSeq[i:i+3], "X")
+    for i in range(0, len(cds), 3):
+        protein += codotable.get(cds[i:i+3], "X")
     return protein
     
 def get_Obs(seqences, genetic_codes, aaseq3=True):
@@ -1193,10 +1197,13 @@ class RSCU_analysis():
         self.RSCU_df = RSCU_df
         self.single_codon_amino_acids = tuple(single_codon_amino_acids)
         
+        df = self.RSCU_df.replace(0, pd.NA)
+        df = df.dropna()
+        df = df.astype("float64")
         ca = prince.CA(n_components=2)
-        self.ca = ca.fit(self.RSCU_df)
+        self.ca = ca.fit(df)
         pca = prince.PCA(n_components=2)
-        self.pca = pca.fit(self.RSCU_df)
+        self.pca = pca.fit(df)
         self.RSCUs_dict = RSCUs_dict
         self.AAColorShapeType={"Gly": ("#4DBBD5FF", "o", "Nonpolar"),
                                "Ala": ("#4DBBD5FF", "v", "Nonpolar"),
@@ -1291,8 +1298,12 @@ class RSCU_analysis():
         ylabel_size: 12
         ax: {None, Aexs}
         """
-        row_coords = self.ca.row_coordinates(self.RSCU_df)
-        col_coords = self.ca.column_coordinates(self.RSCU_df)
+        
+        df = self.RSCU_df.replace(0, pd.NA)
+        df = df.dropna()
+        df = df.astype("float64")
+        row_coords = self.ca.row_coordinates(df)
+        col_coords = self.ca.column_coordinates(df)
         
         # Plotting the results
         if ax == None:
@@ -1301,7 +1312,7 @@ class RSCU_analysis():
         # Adding labels
         if show_codon_labels !=None and show_codon_labels !=False:
             if isinstance(show_codon_labels, list):
-                for i, index in enumerate(self.RSCU_df.index):
+                for i, index in enumerate(df.index):
                     aa = index[0]
                     codon = index[1]
                     if codon in show_codon_labels:
@@ -1312,7 +1323,7 @@ class RSCU_analysis():
                                     ha=codon_labels_ha,
                                     va=codon_labels_va)
             else:
-                for i, index in enumerate(self.RSCU_df.index):
+                for i, index in enumerate(df.index):
                     aa = index[0]
                     codon = index[1]
                     ax.annotate(codon,
@@ -1324,7 +1335,7 @@ class RSCU_analysis():
         
         if show_species_labels != None and show_species_labels != False:
             if isinstance(show_species_labels, list):
-                for i, spceies in enumerate(self.RSCU_df.columns):
+                for i, spceies in enumerate(df.columns):
                     if spceies in show_species_labels:
                         ax.annotate(spceies, 
                                     (col_coords[0][i], col_coords[1][i]),
@@ -1334,7 +1345,7 @@ class RSCU_analysis():
                                     ha = species_labels_ha,
                                     va = species_labels_va)
             else:
-                for i, spceies in enumerate(self.RSCU_df.columns):
+                for i, spceies in enumerate(df.columns):
                     ax.annotate(spceies,
                                 (col_coords[0][i], col_coords[1][i]),
                                 color=species_labels_color,
@@ -1651,7 +1662,6 @@ class RSCU_analysis():
         """
         Description 
         -----------
-        
         Draw pearson heatmap of RSCU.
         
         Parameters
@@ -1683,9 +1693,117 @@ class RSCU_analysis():
         fig.subplots_adjust(hspace=0.8)
         for prefix, ax in zip(self.RSCUs_dict, axs):
             self.RSCUs_dict[prefix].draw_barplot(title=prefix, codon_space=0.25, ax=ax)
-            
         return None
     
+    def get_tree_nj(self, metric='euclidean', outgroup="midpoint"):
+        """
+        Description 
+        -----------
+        Return a tree object from TreeNode class of scikit-bio. 
+        
+        Parameters
+        ----------
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        dist = pdist(np.matrix(self.RSCU_df.T), metric=metric)
+        dist_matrix = DistanceMatrix(squareform(dist), ids=list(self.RSCU_df.T.index))
+        tree = nj(dist_matrix)
+        if outgroup == None:
+            pass
+        elif outgroup == "midpoint":
+            tree = tree.root_at_midpoint(inplace=False, reset=True)
+        else:
+            tree = tree.root_by_outgroup(outgroup)
+        return tree
+    
+    def get_tree_nj_newick_string(self, metric='euclidean', outgroup="midpoint"):
+        """
+        Description 
+        -----------
+        Return a tree string of newick format. 
+        
+        Parameters
+        ----------
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        tree = self.get_tree_nj(metric, outgroup)
+        f = io.StringIO()
+        tree.write(f)
+        f.seek(0)
+        tree_str = f.read()
+        f.close()
+        return tree_str[:-1]
+    
+    def draw_tree_plot(self,
+                       figsize=(8,8), 
+                       ax=None,
+                       metric='euclidean',
+                       outgroup="midpoint",
+                       ignore_branch_length=True,
+                       ladderize=True,
+                       ladderize_by="size",
+                       ladderize_direction="right",
+                       leaf_label_size=10,
+                       linewidth=1.5,
+                       width=10,
+                       height=0.7):
+        """
+        Description 
+        -----------
+        Draw tree plot of RSCU by NJ method.
+        
+        Parameters
+        ----------
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        figsize: tuple of (width, height), optional
+        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
+        ignore_branch_length : {bool} Ignore branch lengths for cladogram
+        innode_label_size : {float} Font size for internal node labels.
+        ladderize : {bool} Enable ladderize tree sorting.
+        ladderize_by : {size, branch_length} Sort criterion.
+        ladderize_direction : {left, right} Direction for larger subtrees.
+        leaf_label_size : {float} Font size for leaf labels.
+        linewidth : {float} Branch line width.
+        height : Figure height per leaf node.
+        width : Figure width.
+        """
+        tree = self.get_tree_nj(metric=metric, outgroup=outgroup)
+        plotter = TreePlotter(tree, 
+                              ignore_branch_length=ignore_branch_length,
+                              ladderize=ladderize,
+                              ladderize_by=ladderize_by,
+                              ladderize_direction=ladderize_direction,
+                              leaf_label_size=leaf_label_size,
+                              linewidth=linewidth,
+                              width=width,
+                              height=height)
+        plotter.plot(figsize=figsize, ax=ax)
+        return None
+
+
+    
+
 class AAComposition_analysis():
     def __init__(self, data, genetic_codes):
         """
@@ -2267,3 +2385,614 @@ class AAComposition_analysis():
         for i in range(0, length):
             res.append(l[i%n])
         return res
+    
+class StopCodon_analysis():
+    def __init__(self, data, genetic_codes, incomplete_codon=True):
+        StopCodon_Count_dict = {}
+        GeneName2StopCodon_dict = {}
+        for prefix, file in data:
+            StopCodon_Count = defaultdict(int)
+            GeneName2StopCodon = {}
+            for ID, Seq in FastaIO(file):
+                if len(Seq) % 3 == 0:
+                    codon = Seq[-3:]
+                    if translate(codon, genetic_codes=genetic_codes) == "*":
+                        stop_codon = codon
+                        StopCodon_Count[stop_codon] += 1
+                        GeneName2StopCodon.setdefault(ID, stop_codon)
+                        
+                elif len(Seq) % 3 == 1:
+                    codon = Seq[-1:]
+                    if incomplete_codon==True:
+                        stop_codon = codon
+                        StopCodon_Count[stop_codon] += 1
+                        GeneName2StopCodon.setdefault(ID, stop_codon)
+                        
+                elif len(Seq) % 3 == 2:
+                    codon = Seq[-2:]
+                    if incomplete_codon==True:
+                        stop_codon = codon
+                        StopCodon_Count[stop_codon] += 1
+                        GeneName2StopCodon.setdefault(ID, stop_codon)
+
+            StopCodon_Count_dict.setdefault(prefix, StopCodon_Count)
+            GeneName2StopCodon_dict.setdefault(prefix, GeneName2StopCodon)
+        self.GeneName2StopCodon_dict = GeneName2StopCodon_dict
+        StopCodon_Count_df = pd.DataFrame(StopCodon_Count_dict)
+        StopCodon_Count_df = StopCodon_Count_df.replace(np.NAN, 0)
+        self.StopCodon_Count_df = StopCodon_Count_df.astype('int64')
+        self.StopCodon_Count_df.index.name = "Stop Codon"
+        
+        pca = prince.PCA(n_components=2)
+        self.pca = pca.fit(self.StopCodon_Count_df)
+        
+    def get_df(self):
+        return pd.melt(self.StopCodon_Count_df.reset_index(), id_vars="Stop Codon", value_name="Count", var_name="Group")
+        
+    def draw_barplot(self, figsize=None, ax=None, palette="Blues", legend_font_style="italic", legend_font_size=10):
+        """
+        Description 
+        ----------
+        Draw barplot of Stop codon count.
+        
+        Parameters
+        ----------
+        figsize: {None, (float, float)}
+        palette: {"Blues", "Set1", "Set2" ...}
+        legend_font_style: {'normal', 'italic', 'oblique'}
+        legend_font_size: 10
+        ax: {None, Aexs}
+        """
+        df = self.get_df()
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        sns.barplot(x=df["Stop Codon"], y=df["Count"], hue=df["Group"], hue_order=sorted(set(df["Group"])), palette=palette, ax=ax)
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False, shadow=False, title='', prop={'style':legend_font_style, 'size':legend_font_size})
+        return None
+    
+    def draw_clustermap(self, 
+                        figsize=None, 
+                        cmap="Blues",
+                        ylabels_fontstyle='italic',
+                        xlabels_fontstyle='normal',
+                        ylabels_fontsize=10,
+                        xlabels_fontsize=10,
+                        row_cluster=True,
+                        col_cluster=True,
+                        show_ylabels=True,
+                        show_xlabels=True):
+        """
+        Description 
+        -----------
+        
+        Draw clustermap of count or franction.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        cmap : matplotlib colormap name or object, or list of colors, optional
+               The mapping from data values to color space. If not provided, the
+               default will depend on whether ``center`` is set.
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
+        ylabels_fontsize: 10
+        xlabels_fontsize: 10
+        show_ylabels: {bool}
+        show_xlabels: {bool}
+        """
+        df = self.StopCodon_Count_df
+        cmp = sns.clustermap(df.T,
+                             figsize=figsize, 
+                             cmap=cmap,
+                             row_cluster = row_cluster,
+                             col_cluster = col_cluster,
+                             yticklabels = show_ylabels,
+                             xticklabels = show_xlabels
+                            )
+        cmp.ax_heatmap.set_yticklabels(cmp.ax_heatmap.get_yticklabels(), fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
+        cmp.ax_heatmap.set_xticklabels(cmp.ax_heatmap.get_xticklabels(), fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
+        cmp.ax_heatmap.set_xlabel("")
+        return None
+    
+    def draw_boxplot(self,
+                     figsize = None,
+                     ax = None,
+                     fontstyle = 'italic',
+                     fontsize = 10):
+        """
+        Description 
+        -----------
+        
+        Draw boxplot of stop codon count.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        fontstyle: {'normal', 'italic', 'oblique'}
+        fontsize: 10
+        """
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        sns.boxplot(self.StopCodon_Count_df, orient='h', ax=ax)
+        ax.set_yticks(ax.get_yticks())
+        ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
+        ax.set_xlabel("Count")
+        return None
+    
+    
+    def draw_PCA_plot(self,
+                      figsize=(6,6), 
+                      labels_color="black", 
+                      labels_style="italic", 
+                      labels_size = 8, 
+                      shapes_color = '#E64B35FF', 
+                      shapes_type = '*',
+                      shapes_size = 100, 
+                      labels_ha = "left", 
+                      labels_va = "bottom",
+                      title = None,
+                      xlabel = None,
+                      ylabel = None,
+                      title_size = 12,
+                      xlabel_size = 12,
+                      ylabel_size = 12,
+                      show_labels = True,
+                      show_legend = False,
+                      ax=None):
+        """
+        Description 
+        ----------
+        Draw principal component analysis of stop codon count plot.
+
+        Parameters
+        ----------
+        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
+        show_legend: {bool}
+        figsize: (6,6)
+        labels_color: black
+        labels_style: {'normal', 'italic', 'oblique'}
+        labels_size: 8,
+        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
+        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
+        shapes_size: 100,
+        labels_ha: {"left", "right", "top", "bottom", "center"}
+        labels_va: {"left", "right", "top", "bottom", "center"}
+        title {None, str}
+        xlabel {None, str}
+        ylabel {None, str}
+        ax: {None, Aexs}
+        """
+        pca = self.pca
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        
+        for z, i in zip(self.get_shape_and_color(pca.column_correlations.shape[0]),
+                        range(pca.column_correlations.shape[0])):
+            x = pca.column_correlations[0][i]
+            y = pca.column_correlations[1][i]
+            label = pca.column_correlations.index[i]
+            shape_type=z[0]
+            shape_color=z[1]
+            
+            if shapes_type !=None:
+                if isinstance(shapes_type, dict):
+                    shape_type = shapes_type.get(label, z[0])
+                else:
+                    shape_type = shapes_type
+            
+            if shapes_color !=None:
+                if isinstance(shapes_color, dict):
+                    shape_color = shapes_color.get(label, z[1])
+                else:
+                    shape_color = shapes_color
+            
+            ax.scatter(x,y, label=label, 
+                       marker=shape_type, 
+                       color=shape_color,
+                       s=shapes_size)
+            
+            if isinstance(show_labels, list):
+                if label in show_labels:
+                    ax.annotate(label, (x,y), 
+                                color=labels_color,
+                                fontsize=labels_size,
+                                style = labels_style,
+                                ha = labels_ha,
+                                va = labels_va)
+            else:
+                if show_labels:
+                    ax.annotate(label, (x,y), 
+                                color=labels_color,
+                                fontsize=labels_size,
+                                style = labels_style,
+                                ha = labels_ha,
+                                va = labels_va)
+        if title == None:
+            title = f'Principal component analysis of stop codon count'
+        if xlabel == None:
+            xlabel = f"Dim1 ({pca.eigenvalues_summary.iloc[0,1]})"
+        if ylabel == None:
+            ylabel = f"Dim2 ({pca.eigenvalues_summary.iloc[1,1]})"
+        
+        ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        
+        if show_legend == True:
+            ax.legend(loc='center left',  
+                      bbox_to_anchor=(1, 0.5),
+                      ncol=1,
+                      frameon=False,
+                      shadow=False,
+                      title='')
+        return None
+    
+    def get_shape_and_color(self, length):
+        shapes = ["o", "s", "^", "<", ">", "v", "p", "P", "*", "h", "H", "+", "x", "X", "D", "d", "8"]
+        colors = ["#1F77B4FF", "#FF7F0EFF", "#2CA02CFF", "#D62728FF", "#9467BDFF", "#8C564BFF", "#E377C2FF", "#7F7F7FFF", "#BCBD22FF", "#17BECFFF"]
+        n = len(shapes) * len(colors)
+        l = []
+        for x in shapes:
+            for y in colors:
+                l.append((x, y))
+        res = []
+        for i in range(0, length):
+            res.append(l[i%n])
+        return res
+
+class TreePlotter:
+    """Phylogenetic Tree Plotter using scikit-bio's TreeNode"""
+    
+    def __init__(
+        self,
+        tree,
+        height=0.5,
+        width=8,
+        ignore_branch_length=False,
+        leaf_label_size= 12,
+        innode_label_size= 0,
+        ladderize= True,
+        ladderize_by= "size",  # "size" or "branch_length"
+        ladderize_direction= "right",  # "left" or "right"
+        linewidth= 1
+    ):
+        """
+        Parameters
+        ----------
+        tree : TreeNode
+            Input tree (must be rooted)
+        height : float
+            Figure height per leaf node
+        width : float
+            Figure width
+        ignore_branch_length : bool
+            Ignore branch lengths for cladogram
+        leaf_label_size : float
+            Font size for leaf labels
+        innode_label_size : float
+            Font size for internal node labels
+        ladderize : bool
+            Enable ladderize tree sorting
+        ladderize_by : str
+            Sort criterion ("size" or "branch_length")
+        ladderize_direction : str
+            Direction for larger subtrees ("left" or "right")
+        linewidth : float
+            Branch line width
+        """
+        self.tree = tree.copy()
+        self.ignore_branch_length = ignore_branch_length
+        self.linewidth = linewidth
+        self.leaf_label_size = leaf_label_size
+        self.innode_label_size = innode_label_size
+        
+        # Ladderize tree if requested
+        if ladderize:
+            self._ladderize(
+                self.tree, 
+                by=ladderize_by, 
+                direction=ladderize_direction
+            )
+        
+        # Set unique names for internal nodes
+        self._set_unique_node_names()
+        
+        # Calculate node positions
+        self.node_positions = self._calc_node_positions()
+        
+        # Initialize plot containers
+        self._plot_patches: List[Patch] = []
+        self._plot_funcs: List[Callable[[Axes], None]] = []
+        
+        # Set figure size based on leaf count
+        num_tips = len(list(self.tree.tips()))
+        self.figsize = (width, height * num_tips)
+
+    # =====================
+    # Tree Processing Methods
+    # =====================
+    
+    def _set_unique_node_names(self):
+        """Set unique names for unnamed internal nodes"""
+        for idx, node in enumerate(self.tree.non_tips(include_self=True)):
+            if not node.is_tip() and not node.name:
+                node.name = f"N_{idx+1}"
+    
+    def _ladderize(
+        self, 
+        tree, 
+        by="size", 
+        direction="right"
+    ):
+        """Recursive ladderization of tree structure
+        
+        Parameters
+        ----------
+        by : str
+            Sorting criterion: "size" (subtree tip count) or 
+            "branch_length" (subtree total length)
+        direction : str
+            Direction for larger subtrees: "left" or "right"
+        """
+        if not tree.children:
+            return
+        
+        # Define sort key function
+        def sort_key(child):
+            if by == "size":
+                return child.count(tips=True)  # Tip count
+            elif by == "branch_length":
+                # Calculate subtree total length
+                return sum(n.length for n in child.traverse() if n.length)
+            else:
+                raise ValueError(f"Invalid 'by' value: {by}")
+        
+        # Sort children (larger subtrees on left/right)
+        reverse = (direction == "left")
+        tree.children.sort(key=sort_key, reverse=reverse)
+        
+        # Recurse into children
+        for child in tree.children:
+            self._ladderize(child, by, direction)
+    
+    def _calc_node_positions(self):
+        """Calculate node coordinates (x, y) via depth-first traversal
+        
+        Returns
+        -------
+        dict
+            Mapping of node names to (x, y) coordinates
+        """
+        positions = {}
+        tips = list(self.tree.tips())
+        num_tips = len(tips)
+        y_positions = np.linspace(0, num_tips, num_tips, endpoint=False)
+        y_index = 0
+        
+        def _layout(node, depth):
+            """Recursive layout function"""
+            nonlocal y_index
+            
+            # Calculate x position: depth or cumulative branch length
+            if self.ignore_branch_length:
+                x_pos = depth
+            else:
+                # Calculate cumulative distance from root
+                if node.is_root():
+                    x_pos = 0
+                else:
+                    # Traverse from node to root to sum branch lengths
+                    current = node
+                    x_pos = 0
+                    while not current.is_root():
+                        x_pos += current.length if current.length else 0
+                        current = current.parent
+                    
+            # Handle tip nodes
+            if node.is_tip():
+                y_pos = y_positions[y_index]
+                positions[node.name] = (x_pos, y_pos)
+                y_index += 1
+                return y_pos
+            
+            # Internal node: process children
+            child_y_positions = []
+            for child in node.children:
+                child_y = _layout(child, depth + 1)
+                child_y_positions.append(child_y)
+            
+            # Current node position is average of children's y positions
+            node_y = np.mean(child_y_positions)
+            positions[node.name] = (x_pos, node_y)
+            return node_y
+        
+        # Start layout from root
+        _layout(self.tree, depth=0)
+        return positions
+
+    # =====================
+    # Plotting Methods
+    # =====================
+    
+    def plot(
+        self, 
+        figsize=(8,8),
+        ax= None):
+        """Plot rectangular layout phylogenetic tree
+        
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Existing axes to plot on
+        Returns
+        -------
+        matplotlib.figure.Figure
+            The generated figure
+        """
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        
+        ax.set_axis_off()
+        # Draw branches
+        for node in self.tree.traverse():
+            if node.is_root():
+                continue
+                
+            parent = node.parent
+            x_node, y_node = self.node_positions[node.name]
+            x_parent, y_parent = self.node_positions[parent.name]
+            
+            # Vertical branch (from parent level to child y-position)
+            ax.plot([x_parent, x_parent], [y_parent, y_node], 
+                    color='black', lw=self.linewidth)
+            
+            # Horizontal branch (to child position)
+            ax.plot([x_parent, x_node], [y_node, y_node], 
+                    color='black', lw=self.linewidth)
+        
+        # Add labels
+        for node in self.tree.traverse():
+            x, y = self.node_positions[node.name]
+            if node.is_tip() and self.leaf_label_size > 0:
+                ax.text(x + 0.02, y, node.name, 
+                        fontsize=self.leaf_label_size, 
+                        va='center', ha='left', fontstyle="italic")
+            elif not node.is_tip() and self.innode_label_size > 0:
+                ax.text(x, y, node.name, 
+                        fontsize=self.innode_label_size, 
+                        va='center', ha='center')
+        
+        # Add custom elements
+        for patch in self._plot_patches:
+            ax.add_patch(patch)
+        for func in self._plot_funcs:
+            func(ax)
+            
+        # Set dynamic axis limits
+        self._set_axis_limits(ax)
+        return None
+    
+    def _set_axis_limits(self, ax):
+        """Set dynamic axis limits with padding"""
+        all_x = [pos[0] for pos in self.node_positions.values()]
+        all_y = [pos[1] for pos in self.node_positions.values()]
+        
+        x_min, x_max = min(all_x), max(all_x)
+        y_min, y_max = min(all_y), max(all_y)
+        
+        x_padding = (x_max - x_min) * 0.1
+        y_padding = (y_max - y_min) * 0.1
+        
+        ax.set_xlim(x_min - x_padding, x_max + x_padding)
+        ax.set_ylim(y_min - y_padding, y_max + y_padding)
+    
+    def highlight_clade(
+        self, 
+        node_names, 
+        color, 
+        alpha= 0.3,
+        **kwargs
+    ):
+        """Highlight a clade with background rectangle
+        
+        Parameters
+        ----------
+        node_names : list of str
+            Node names defining the clade
+        color : str
+            Fill color for the highlight
+        alpha : float
+            Transparency of the highlight (0-1)
+        **kwargs
+            Additional rectangle properties
+        """
+        # Find common ancestor of specified nodes
+        mrca = self.tree.lowest_common_ancestor(node_names)
+        
+        # Get all tips in the clade
+        tips = list(mrca.tips())
+        x_vals = [self.node_positions[tip.name][0] for tip in tips]
+        y_vals = [self.node_positions[tip.name][1] for tip in tips]
+        
+        # Create background rectangle
+        rect = Rectangle(
+            xy=(min(x_vals), min(y_vals)),
+            width=max(x_vals) - min(x_vals),
+            height=max(y_vals) - min(y_vals),
+            color=color,
+            alpha=alpha,
+            zorder=-10,
+            **kwargs
+        )
+        self._plot_patches.append(rect)
+    
+    def add_node_label(
+        self, 
+        node_name, 
+        label, 
+        size= 8,
+        **kwargs
+    ):
+        """Add custom text label to a specific node
+        
+        Parameters
+        ----------
+        node_name : str
+            Name of the node to label
+        label : str
+            Text to display
+        size : int
+            Font size
+        **kwargs
+            Additional text properties
+        """
+        def _add_label(ax: plt.Axes):
+            if node_name not in self.node_positions:
+                raise ValueError(f"Node '{node_name}' not found in tree")
+                
+            x, y = self.node_positions[node_name]
+            ax.text(x, y, label, size=size, **kwargs)
+            
+        self._plot_funcs.append(_add_label)
+    
+    def add_scale_bar(
+        self, 
+        length, 
+        label, 
+        position= (0.05, 0.05),
+        **kwargs):
+        """Add evolutionary distance scale bar
+        
+        Parameters
+        ----------
+        length : float
+            Length to represent (in branch length units)
+        label : str
+            Text label for the scale
+        position : tuple (x, y)
+            Position in axes coordinates (0-1)
+        **kwargs
+            Additional line/text properties
+        """
+        def _add_scale(ax: plt.Axes):
+            # Convert from axes to data coordinates
+            x_min, x_max = ax.get_xlim()
+            y_min, y_max = ax.get_ylim()
+            
+            x_data = position[0] * (x_max - x_min) + x_min
+            y_data = position[1] * (y_max - y_min) + y_min
+            
+            # Draw scale bar
+            ax.plot([x_data, x_data + length], [y_data, y_data], 
+                    color='black', lw=2, **kwargs)
+            
+            # Add label
+            ax.text(x_data + length/2, y_data - (y_max-y_min)*0.02, 
+                    label, ha='center', va='top', **kwargs)
+                    
+        self._plot_funcs.append(_add_scale)
