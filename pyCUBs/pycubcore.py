@@ -3,8 +3,9 @@
 
 __author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2025/06/21"
 __all__ = ["translate", "get_Obs", "get_Franction", "get_Frequency", "get_RSCU",
-           "draw_codon_barplot", "get_cusp_like", "get_codonW_like", "get_NC", "get_PR2", "get_GC123", "find_four_codon_AA",
-           "NPA_analysis", "ENC_analysis", "PR2_analysis", 
+           "draw_codon_barplot", "get_cusp_like", "get_codonW_like",
+           "get_NC", "get_PR2", "get_GC123", "find_four_codon_AA",
+           "TreePlotter","NPA_analysis", "ENC_analysis", "PR2_analysis", 
            "RSCU_analysis", "AAComposition_analysis", "StopCodon_analysis"]
 
 __version__ = "v2.00"
@@ -22,7 +23,7 @@ from matplotlib.patches import Patch, Rectangle
 from collections import defaultdict
 from codontables import CodonTables, Seq3toSeq1
 from skbio import DistanceMatrix
-from skbio.tree import TreeNode, nj
+from skbio.tree import TreeNode, nj, upgma, gme, bme, nni
 from scipy.spatial.distance import pdist, squareform
 
 def translate(cds, genetic_codes):
@@ -1695,7 +1696,7 @@ class RSCU_analysis():
             self.RSCUs_dict[prefix].draw_barplot(title=prefix, codon_space=0.25, ax=ax)
         return None
     
-    def get_tree_nj(self, metric='euclidean', outgroup="midpoint"):
+    def get_tree(self, metric='euclidean', outgroup="midpoint", tree_method="upgma"):
         """
         Description 
         -----------
@@ -1703,6 +1704,7 @@ class RSCU_analysis():
         
         Parameters
         ----------
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
         metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
         correlation, cosine, dice, hamming, jaccard, jensenshannon,
         kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
@@ -1714,7 +1716,15 @@ class RSCU_analysis():
         """
         dist = pdist(np.matrix(self.RSCU_df.T), metric=metric)
         dist_matrix = DistanceMatrix(squareform(dist), ids=list(self.RSCU_df.T.index))
-        tree = nj(dist_matrix)
+        if tree_method == 'nj':
+            tree = nj(dist_matrix)
+        elif tree_method == 'upgma':
+            tree = upgma(dist_matrix)
+        elif tree_method == "gme":
+            tree = gme(dist_matrix)
+        elif tree_method == 'bme':
+            tree = bme(dist_matrix)
+            
         if outgroup == None:
             pass
         elif outgroup == "midpoint":
@@ -1723,7 +1733,7 @@ class RSCU_analysis():
             tree = tree.root_by_outgroup(outgroup)
         return tree
     
-    def get_tree_nj_newick_string(self, metric='euclidean', outgroup="midpoint"):
+    def get_tree_newick_string(self, metric='euclidean', outgroup="midpoint", tree_method="upgma"):
         """
         Description 
         -----------
@@ -1731,6 +1741,7 @@ class RSCU_analysis():
         
         Parameters
         ----------
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
         metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
         correlation, cosine, dice, hamming, jaccard, jensenshannon,
         kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
@@ -1740,7 +1751,7 @@ class RSCU_analysis():
         braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
         outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
         """
-        tree = self.get_tree_nj(metric, outgroup)
+        tree = self.get_tree(metric, outgroup, tree_method)
         f = io.StringIO()
         tree.write(f)
         f.seek(0)
@@ -1751,6 +1762,7 @@ class RSCU_analysis():
     def draw_tree_plot(self,
                        figsize=(8,8), 
                        ax=None,
+                       tree_method="upgma",
                        metric='euclidean',
                        outgroup="midpoint",
                        ignore_branch_length=True,
@@ -1768,6 +1780,7 @@ class RSCU_analysis():
         
         Parameters
         ----------
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
         metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
         correlation, cosine, dice, hamming, jaccard, jensenshannon,
         kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
@@ -1788,7 +1801,7 @@ class RSCU_analysis():
         height : Figure height per leaf node.
         width : Figure width.
         """
-        tree = self.get_tree_nj(metric=metric, outgroup=outgroup)
+        tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method)
         plotter = TreePlotter(tree, 
                               ignore_branch_length=ignore_branch_length,
                               ladderize=ladderize,
@@ -1801,8 +1814,6 @@ class RSCU_analysis():
         plotter.plot(figsize=figsize, ax=ax)
         return None
 
-
-    
 
 class AAComposition_analysis():
     def __init__(self, data, genetic_codes):
