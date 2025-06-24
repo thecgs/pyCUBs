@@ -2,7 +2,9 @@
 # coding: utf-8
 
 __author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2025/06/21"
-__all__ = ["translate", "get_Obs", "get_Franction", "get_Frequency", "get_RSCU",
+__all__ = ["translate", "get_Obs", "get_Fraction", "get_Frequency", 
+           "get_emboss_cutfile_from_Obs", "get_Obs_from_emboss_cutfile", "get_codonw_cai_file_from_Obs",
+           "get_RSCU", "get_Relative_Adaptiveness", "get_CAI", "get_Gravy", "get_Aromo",
            "draw_codon_barplot", "get_cusp_like", "get_codonW_like",
            "get_NC", "get_PR2", "get_GC123", "find_four_codon_AA",
            "TreePlotter","NPA_analysis", "ENC_analysis", "PR2_analysis", 
@@ -12,6 +14,8 @@ __version__ = "v2.00"
 
 import os
 import io
+import sys
+import math
 import prince
 import numpy as np
 import pandas as pd
@@ -23,7 +27,7 @@ from matplotlib.patches import Patch, Rectangle
 from collections import defaultdict
 from codontables import CodonTables, Seq3toSeq1
 from skbio import DistanceMatrix
-from skbio.tree import TreeNode, nj, upgma, gme, bme, nni
+from skbio.tree import TreeNode, nj, upgma, gme, bme
 from scipy.spatial.distance import pdist, squareform
 
 def translate(cds, genetic_codes):
@@ -52,7 +56,7 @@ def get_Obs(seqences, genetic_codes, aaseq3=True):
     
     Parameters
     ----------
-    seqences: {str, list} a seqence string, or a seqences list, or a fasta or fasta.gz format file path.
+    seqences: {str, list, file path} a seqence string, or a seqences list, or a fasta or fasta.gz format file path.
     genetic_codes: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
     aaseq3: if value is True, amino acid three letter code.
     """
@@ -100,6 +104,298 @@ def get_Obs(seqences, genetic_codes, aaseq3=True):
             Obs.setdefault(AA, {Codon: Codons.get(Codon, 0)})
     return Obs
 
+def get_codonw_cai_file_from_Obs(Obs, outfile=None):
+    """
+    Description
+    ----------
+    To create a condow cai file from the get_Obs return value of the constructed high expression gene.
+    
+    Parameters
+    ----------
+    Obs: get_Obs function return value.
+    """
+    
+    RA = get_Relative_Adaptiveness(Obs)
+    a1 = {}
+    for aa in RA.Relative_Adaptiveness_dict:
+        for c in RA.Relative_Adaptiveness_dict[aa]:
+            a1.setdefault(c,RA.Relative_Adaptiveness_dict[aa][c])
+    a2 =  ["TTT","TCT","TAT","TGT","TTC","TCC","TAC","TGC","TTA","TCA","TAA","TGA","TTG","TCG","TAG","TGG",
+           "CTT","CCT","CAT","CGT","CTC","CCC","CAC","CGC","CTA","CCA","CAA","CGA","CTG","CCG","CAG","CGG",
+           "ATT","ACT","AAT","AGT","ATC","ACC","AAC","AGC","ATA","ACA","AAA","AGA","ATG","ACG","AAG","AGG",
+           "GTT","GCT","GAT","GGT", "GTC","GCC","GAC","GGC", "GTA","GCA","GAA","GGA","GTG","GCG","GAG","GGG"]
+    
+    if outfile==None:
+        out = sys.stdout
+    else:
+        out = open(outfile, 'w')
+    
+    for c in a2:
+        print(a1[c], file=out)
+    if outfile!=None:
+        out.close()
+    return None
+
+def get_emboss_cutfile_from_Obs(Obs, outfile=None):
+    """
+    Description
+    ----------
+    To create a emboss cutfile from the get_Obs return value of the constructed high expression gene.
+    
+    Parameters
+    ----------
+    Obs: get_Obs function return value.
+    """
+    
+    Frequency = get_Frequency(Obs)
+    Fraction = get_Fraction(Obs)
+    if outfile == None:
+        out = sys.stdout
+    else:
+        out = open(outfile, 'w')
+    
+    print("# The file building with pycubs (https://github.com/thecgs/pycubs) \n# Codon AA Fraction Frequency Number", file=out)
+    for aa in Frequency.Frequency_dict:
+        for c in Frequency.Frequency_dict[aa]:
+            if len(aa) !=1:
+                aa1 = Seq3toSeq1[aa]
+            else:
+                aa1=aa
+            print(c, aa1, 
+                  round(Fraction.Fraction_dict[aa][c],3), 
+                  round(Frequency.Frequency_dict[aa][c],3), 
+                  Obs[aa][c], file=out, sep = "    ")
+    if outfile !=None:
+        out.close()
+    return None
+
+def get_Obs_from_emboss_cutfile(file, aaseq3=True):
+    """
+    Description
+    ----------
+    Gets the Obs object from the emboss cut file with the same value as the get_Obs function returns.
+    
+    Parameters
+    ----------
+    file : a emboss cut file.
+    aaseq3: if value is True, amino acid three letter code.
+    """
+    Seq1toSeq3 = {Seq3toSeq1[k]:k for k in Seq3toSeq1}
+    Obs = {}
+    with open(file, 'r') as f:
+        for l in f:
+            if l.strip() != "" and not l.startswith('#'):
+                l = l.strip('\n').split()
+                if aaseq3==True:
+                    aa = Seq1toSeq3[l[1]]
+                else:
+                    aa = l[1]
+                    
+                if aa in Obs:
+                    Obs[aa][l[0]] = int(l[4])
+                else:
+                    Obs.setdefault(aa, {l[0]: int(l[4])})
+    return Obs
+
+def get_Relative_Adaptiveness(Obs):
+    """
+    
+    Description
+    ----------
+    Relative adaptiveness (w) from codonW (by John Peden).
+
+    Parameters
+    ----------
+    Obs: get_Obs function return value.
+    
+    Reference
+    ----------
+    [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
+    """
+    class Relative_Adaptiveness():
+        def __init__(self, obj):
+            self.Relative_Adaptiveness_dict = obj
+            
+        def draw_barplot(self,
+                         ylabel='Relative adaptiveness',
+                         title=None,
+                         color_preset=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
+                         width=0.9,
+                         remove_stop_codon=True,
+                         figsize=(8,4),
+                         codon_space = 0.16,
+                         ax=None):
+            """
+            Description
+            ----------
+            Draw a codons barplot.
+
+            Parameters
+            ----------
+            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
+            figsize: (8,4)
+            ylabel: ylabel of plot.
+            title: title of plot.
+            width: bar spacing width. default=0.9
+            color_preset: ["Set1", "Set2", "Set3", "tab10", "tab20", "tab20b", "tab20c", "Dark2"]
+            remove_stop_codon: {bool} remove stop codon.
+            ax: {None, Aexs}
+            codon_space: {0-1} codon spacing.
+            """
+            draw_codon_barplot(self.Relative_Adaptiveness_dict, ylabel=ylabel, title=title, 
+                               color_preset=color_preset, width=width,
+                               remove_stop_codon=remove_stop_codon,
+                               figsize=figsize, ax=ax, codon_space=codon_space)
+            return None
+    
+        def __str__(self):
+            STR = ""
+            for AA in self.Relative_Adaptiveness_dict:
+                STR += AA + ":\n"
+                for codon in self.Relative_Adaptiveness_dict[AA]:
+                    STR += f"    {codon}: {self.Relative_Adaptiveness_dict[AA][codon]}\n"
+            return STR
+        
+        def __repr__(self):
+            return self.__str__()
+    
+    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
+                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
+
+    Relative_Adaptiveness_dict = {}
+    Fraction = get_Fraction(Obs)
+    for aa in Fraction.Fraction_dict:
+        Relative_Adaptiveness_dict.setdefault(aa, {})
+        max_fraction_per_aa = max(Fraction.Fraction_dict[aa].values())
+        if max_fraction_per_aa!=0:
+            for c in Fraction.Fraction_dict[aa]:
+                Relative_Adaptiveness_dict[aa].setdefault(c, Fraction.Fraction_dict[aa][c] / max_fraction_per_aa)
+        else:
+            for c in Fraction.Fraction_dict[aa]:
+                Relative_Adaptiveness_dict[aa].setdefault(c, 0)
+            
+    Relative_Adaptiveness_dict_order = {}
+    for aa in aa_order:
+        if aa in Relative_Adaptiveness_dict:
+            Relative_Adaptiveness_dict_order.setdefault(aa, {codon: Relative_Adaptiveness_dict[aa][codon] for codon in sorted(Relative_Adaptiveness_dict[aa].keys())})
+    return Relative_Adaptiveness(Relative_Adaptiveness_dict_order)
+
+def get_CAI(query, reference, model="codonw", genetic_codes=None):
+    """
+    Description 
+    ----------
+    Codon Adaptation Index (CAI). 
+    CAI is a measurement of the relative adaptiveness of the codon usage of a 
+    gene towards the codon usage of highly expressed genes. 
+
+    Parameters
+    ----------
+    query: {str, list, file path, Obs} get_Obs return value, or a seqence string, or a seqences list, or a fasta or fasta.gz format file path.
+    reference: {str, list, file path, Obs} get_Obs return value, or a seqence string, or a seqences list, or a fasta or fasta.gz format file path.
+              It is recommended to use get_Obs return value, because with other types of input, the essence is still to call get_Obs.
+    model : {emboss, codonw} if model==emboss, Non-synonymous codons and termination codons (dependent on genetic code) are unexcluded. 
+                             if model==codonw, Non-synonymous codons and termination codons (dependent on genetic code) are excluded.
+    genetic_codes: genetic code id, use `import codontables; codontables.CodonTables()` for more details. 
+                   if query and reference are get_Obs return value, genetic_codes does not need to be specified because get_Obs return value already contains genetic_codes information.
+                   
+    References
+    ----------
+    [1] Sharp, Paul M., and Wen-Hsiung Li. "The codon adaptation index-a measure of directional synonymous codon usage bias, and its potential applications." Nucleic acids research 15.3 (1987): 1281-1295.
+    """
+    
+    if isinstance(query, str) or isinstance(query, list):
+        if genetic_codes == None:
+            raise ValueError("Please specify genetic_codes options.")
+        else:
+            Obs = get_Obs(query, genetic_codes=genetic_codes)
+    elif isinstance(query, dict):
+        Obs = query
+        
+    if isinstance(reference, str) or isinstance(reference, list):
+        if genetic_codes == None:
+            raise ValueError("Please specify genetic_codes options.")
+        else:
+            ref_Obs = get_Obs(reference, genetic_codes=genetic_codes)
+    elif isinstance(reference, dict):
+        ref_Obs = reference
+        
+    Relative_Adaptiveness = get_Relative_Adaptiveness(ref_Obs)
+    w_list = []
+    if model == "emboss":
+        for aa in Obs:
+            for c in Obs[aa]:
+                w = Relative_Adaptiveness.Relative_Adaptiveness_dict[aa][c]
+                if w != 0:
+                    w_list.extend([w]*Obs[aa][c])
+                else:
+                    w_list.extend([0.01]*Obs[aa][c])
+                    
+    elif model == "codonw":
+        for aa in Obs:
+            if aa !="*" and len(Obs[aa].keys()) !=1:
+                for c in Obs[aa]:
+                    w = Relative_Adaptiveness.Relative_Adaptiveness_dict[aa][c]
+                    if w != 0:
+                        w_list.extend([w]*Obs[aa][c])
+                    else:
+                        w_list.extend([0.01]*Obs[aa][c])
+                        
+    cai = math.exp(sum([math.log(w, math.e) for w in w_list]) /len(w_list))
+    return cai
+
+def get_Gravy(Obs):
+    """
+    Description
+    ----------
+    The general average hydropathicity or (GRAVY) score, for the hypothetical translated gene product.
+    It is calculated as the arithmetic mean of the sum of the hydropathic indices of each amino acid.
+    The more the Gravy value is biased towards a negative value, the stronger the hydrophilicity of the protein;
+    the more the Gravy value is biased towards a positive value, the stronger the hydrophobicity of the protein
+    
+    Parameters
+    ----------
+    Obs: get_Obs function return value.
+    
+    Reference
+    ----------
+    [1] Kyte, Jack, and Russell F. Doolittle. "A simple method for displaying the hydropathic character of a protein." Journal of molecular biology 157.1 (1982): 105-132.
+    [2] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
+    """
+    hydropathy_index = {'Ala': 1.8, 'Arg': -4.5, 'Asn': -3.5, 'Asp': -3.5, 'Cys': 2.5, 'Gln': -3.5, 'Glu': -3.5, 'Gly': -0.4, 'His': -3.2, 'Ile': 4.5, 
+                        'Leu': 3.8, 'Lys': -3.9, 'Met': 1.9, 'Phe': 2.8, 'Pro': -1.6, 'Ser': -0.8, 'Thr': -0.7, 'Trp': -0.9, 'Tyr': -1.3, 'Val': 4.2, 
+                        'A': 1.8, 'R': -4.5, 'N': -3.5, 'D': -3.5, 'C': 2.5, 'Q': -3.5, 'E': -3.5, 'G': -0.4, 'H': -3.2, 'I': 4.5,
+                        'L': 3.8, 'K': -3.9, 'M': 1.9, 'F': 2.8, 'P': -1.6, 'S': -0.8, 'T': -0.7, 'W': -0.9, 'Y': -1.3, 'V': 4.2}
+    total = 0
+    aa_num = 0
+    for aa in hydropathy_index:
+        if aa in Obs:
+            aa_num += sum(Obs[aa].values())
+            total += sum(Obs[aa].values()) * hydropathy_index[aa]
+    return total/ aa_num
+
+def get_Aromo(Obs):
+    """
+    Description
+    ----------
+    Aromaticity score of protein. This is the frequency of aromatic amino  acids (Phe, Tyr, Trp)
+    in the hypothetical translated gene product.
+
+    Parameters
+    ----------
+    Obs: get_Obs function return value.
+    
+    Reference
+    ----------
+    [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
+    """
+    aromatic_aa_num = 0
+    aromatic_aas= ["Phe", "Tyr", "Trp", "F", "Y", "W"]
+    for aromatic_aa in aromatic_aas:
+        if aromatic_aa in Obs:
+            aromatic_aa_num += sum(Obs[aromatic_aa].values())
+    aa_num = sum([sum(Obs[aa].values()) for aa in Obs if aa != "*"])
+    return aromatic_aa_num / aa_num
+
 def get_RSCU(Obs):
     """
     Description
@@ -135,7 +431,7 @@ def get_RSCU(Obs):
 
             Parameters
             ----------
-            obj: return value of get_Obs, get_Franction, get_Frequency, or get_RSCU function.
+            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
             figsize: (8,4)
             ylabel: ylabel of plot.
             title: title of plot.
@@ -181,13 +477,13 @@ def get_RSCU(Obs):
             RSCU_dict_order.setdefault(aa, {codon: RSCU_dict[aa][codon] for codon in sorted(RSCU_dict[aa].keys())})
     return RSCU(RSCU_dict_order)
 
-def get_Franction(Obs):
+def get_Fraction(Obs):
     """
     Description 
     ----------
-    Calculate franction of codon.
-    Franction represents the proportion of each codon in the codon encoding the amino acid, i.e.
-    Franction = the number of occurrences of a codon/the number of occurrences of all codons of the amino acid encoded by the codon.
+    Calculate Fraction of codon.
+    Fraction represents the proportion of each codon in the codon encoding the amino acid, i.e.
+    Fraction = the number of occurrences of a codon/the number of occurrences of all codons of the amino acid encoded by the codon.
     
     Parameters
     ----------
@@ -199,12 +495,12 @@ def get_Franction(Obs):
     Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
     """
     
-    class Franction():
+    class Fraction():
         def __init__(self, obj):
-            self.Franction_dict = obj
+            self.Fraction_dict = obj
             
         def draw_barplot(self,
-                         ylabel='Franction',
+                         ylabel='Fraction',
                          title=None,
                          color_preset=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
                          width=0.9,
@@ -219,7 +515,7 @@ def get_Franction(Obs):
 
             Parameters
             ----------
-            obj: return value of get_Obs, get_Franction, get_Frequency, or get_RSCU function.
+            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
             figsize: (8,4)
             ylabel: ylabel of plot.
             title: title of plot.
@@ -229,7 +525,7 @@ def get_Franction(Obs):
             ax: {None, Aexs}
             codon_space: {0-1} codon spacing.
             """
-            draw_codon_barplot(self.Franction_dict, ylabel=ylabel, title=title, 
+            draw_codon_barplot(self.Fraction_dict, ylabel=ylabel, title=title, 
                                color_preset=color_preset, width=width,
                                remove_stop_codon=remove_stop_codon,
                                figsize=figsize, ax=ax, codon_space=codon_space)
@@ -237,32 +533,32 @@ def get_Franction(Obs):
     
         def __str__(self):
             STR = ""
-            for AA in self.Franction_dict:
+            for AA in self.Fraction_dict:
                 STR += AA + ":\n"
-                for codon in self.Franction_dict[AA]:
-                    STR += f"    {codon}: {self.Franction_dict[AA][codon]}\n"
+                for codon in self.Fraction_dict[AA]:
+                    STR += f"    {codon}: {self.Fraction_dict[AA][codon]}\n"
             return STR
         
         def __repr__(self):
             return self.__str__()
         
-    Franction_dict = {}
+    Fraction_dict = {}
     for AA in Obs:
-        Franction_dict.setdefault(AA, {})
+        Fraction_dict.setdefault(AA, {})
         Total = sum(Obs[AA].values())
         for Codon in Obs[AA]:
             if Total == 0:
-                Franction_dict[AA][Codon] = 0
+                Fraction_dict[AA][Codon] = 0
             else:
-                Franction_dict[AA][Codon] = Obs[AA][Codon]/Total
+                Fraction_dict[AA][Codon] = Obs[AA][Codon]/Total
             
     aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
                 'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
-    Franction_dict_order = {}
+    Fraction_dict_order = {}
     for aa in aa_order:
-        if aa in Franction_dict:
-            Franction_dict_order.setdefault(aa, {codon: Franction_dict[aa][codon] for codon in sorted(Franction_dict[aa].keys())})
-    return Franction(Franction_dict_order)
+        if aa in Fraction_dict:
+            Fraction_dict_order.setdefault(aa, {codon: Fraction_dict[aa][codon] for codon in sorted(Fraction_dict[aa].keys())})
+    return Fraction(Fraction_dict_order)
 
 def get_Frequency(Obs):
     """
@@ -303,7 +599,7 @@ def get_Frequency(Obs):
 
             Parameters
             ----------
-            obj: return value of get_Obs, get_Franction, get_Frequency, or get_RSCU function.
+            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
             figsize: (8,4)
             ylabel: ylabel of plot.
             title: title of plot.
@@ -361,7 +657,7 @@ def draw_codon_barplot(obj,
     
     Parameters
     ----------
-    obj: return value of get_Obs, get_Franction, get_Frequency, or get_RSCU function.
+    obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
     figsize: (8,4)
     ylabel: ylabel of plot.
     title: title of plot.
@@ -378,14 +674,18 @@ def draw_codon_barplot(obj,
             obj = obj.RSCU_dict.copy()
             if ylabel == None:
                 ylabel = "RSCU"
-        if "Franction_dict" in list(dir(obj)):
-            obj = obj.Franction_dict.copy()
+        if "Fraction_dict" in list(dir(obj)):
+            obj = obj.Fraction_dict.copy()
             if ylabel == None:
-                ylabel = "Franction"
+                ylabel = "Fraction"
         if "Frequency_dict" in list(dir(obj)):
             obj = obj.Frequency_dict.copy()
             if ylabel == None:
                 ylabel = "Frequency"
+        if "Relative_Adaptiveness_dict" in list(dir(obj)):
+            obj = obj.Relative_Adaptiveness_dict.copy()
+            if ylabel == None:
+                ylabel = "Relative adaptiveness"
     
     if remove_stop_codon:
         if "*" in obj:
@@ -461,13 +761,13 @@ def get_cusp_like(Obs, human_format=False):
     GC1 = (ATGC1.get('C', 0) + ATGC1.get('G', 0))/sum(ATGC1.values())
     GC2 = (ATGC2.get('C', 0) + ATGC2.get('G', 0))/sum(ATGC2.values())
     GC3 = (ATGC3.get('C', 0) + ATGC3.get('G', 0))/sum(ATGC3.values())
-    Franction = get_Franction(Obs)
+    Fraction = get_Fraction(Obs)
     Frequency = get_Frequency(Obs)
     CupsResult = [{"Coding GC": GC,
                    "1st letter GC": GC1,
                    "2nd letter GC": GC2,
                    "3rd letter GC": GC3}, 
-                  {"Franction": Franction,
+                  {"Fraction": Fraction,
                    "Frequency":Frequency,
                    "Number": Obs}
                  ]
@@ -478,9 +778,9 @@ def get_cusp_like(Obs, human_format=False):
             print('#'+k, str(round(CupsResult[0][k]*100, 2))+'%', file=out)
         print('\n#Codon AA Fraction Frequency Number', file=out)
         for AA in CupsResult[1]['Number']:
-            for Codon in CupsResult[1]['Franction'][AA]:
+            for Codon in CupsResult[1]['Fraction'][AA]:
                 print(Codon, AA, 
-                      round(CupsResult[1]['Franction'][AA][Codon], 3),
+                      round(CupsResult[1]['Fraction'][AA][Codon], 3),
                       round(CupsResult[1]['Frequency'][AA][Codon], 3),
                       CupsResult[1]['Number'][AA][Codon], sep='\t', file=out)
         out.seek(0)
@@ -500,6 +800,10 @@ def get_codonW_like(Obs, human_format=False):
     ----------
     Obs: get_Obs function return value.
     human_format: {bool} if value is True, return human readable format.
+    
+    Reference
+    ----------
+    [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
     
     def X3s(Obs, base=["A", "T", "G", "C"]):
@@ -566,7 +870,11 @@ def get_codonW_like(Obs, human_format=False):
     
     Nc = get_NC(Obs)
     
-    codonWResult = {"A3s":A3s, "T3s":T3s, "G3s":G3s, "C3s":C3s, "GC3s": GC3s, "GC": GC, "Nc": Nc, 'L_sym': L_sym, 'L_aa':L_aa}
+    Gravy = get_Gravy(Obs)
+    Aromo = get_Aromo(Obs)
+    
+    codonWResult = {"A3s":A3s, "T3s":T3s, "G3s":G3s, "C3s":C3s, "GC3s": GC3s, "GC": GC,
+                    "Nc": Nc, 'L_sym': L_sym, 'L_aa':L_aa, 'Gravy': Gravy, 'Aromo': Aromo}
     if human_format:
         out = io.StringIO()
         print("{:<6s}".format("T3s"),
@@ -578,6 +886,8 @@ def get_codonW_like(Obs, human_format=False):
               "{:<6s}".format("GC"),
               "{:<6s}".format("L_sym"), 
               "{:<6s}".format("L_aa"), 
+              "{:<6s}".format("Gravy"),
+              "{:<6s}".format("Aromo"),
               file=out,
              )
         
@@ -590,6 +900,8 @@ def get_codonW_like(Obs, human_format=False):
               "{:<6.3f}".format(round(codonWResult["GC"], 3)),
               "{:<6}".format(codonWResult["L_sym"]), 
               "{:<6}".format(codonWResult["L_aa"]),
+              "{:<6.6f}".format(codonWResult["Gravy"]),
+              "{:<6.6f}".format(codonWResult["Aromo"]),
               file=out,
              )
         out.seek(0)
@@ -1839,17 +2151,17 @@ class AAComposition_analysis():
             AA_count_dict.setdefault(prefix, {Seq1toSeq3[AA]:AA_count[AA] for AA in AA_count if AA in Seq1toSeq3})
         
         self.AA_count_df = pd.DataFrame(AA_count_dict)
-        self.AA_franction_df = pd.DataFrame(data=None, dtype="float64", columns=self.AA_count_df.columns)
+        self.AA_Fraction_df = pd.DataFrame(data=None, dtype="float64", columns=self.AA_count_df.columns)
         for i in range(0, self.AA_count_df.shape[1]):
-            self.AA_franction_df.iloc[:,i] = self.AA_count_df.iloc[:,i] / self.AA_count_df.iloc[:,i].sum()
+            self.AA_Fraction_df.iloc[:,i] = self.AA_count_df.iloc[:,i] / self.AA_count_df.iloc[:,i].sum()
         AA_count_ca = prince.CA(n_components=2)
         self.AA_count_ca = AA_count_ca.fit(self.AA_count_df)
-        AA_franction_ca = prince.CA(n_components=2)
-        self.AA_franction_ca = AA_franction_ca.fit(self.AA_franction_df)
+        AA_Fraction_ca = prince.CA(n_components=2)
+        self.AA_Fraction_ca = AA_Fraction_ca.fit(self.AA_Fraction_df)
         AA_count_pca = prince.PCA(n_components=2)
         self.AA_count_pca = AA_count_pca.fit(self.AA_count_df)
-        AA_franction_pca = prince.PCA(n_components=2)
-        self.AA_franction_pca = AA_franction_pca.fit(self.AA_franction_df)
+        AA_Fraction_pca = prince.PCA(n_components=2)
+        self.AA_Fraction_pca = AA_Fraction_pca.fit(self.AA_Fraction_df)
         self.AAColorShapeType={"Gly": ("#4DBBD5FF", "o", "Nonpolar"),
                                "Ala": ("#4DBBD5FF", "v", "Nonpolar"),
                                "Val": ("#4DBBD5FF", "^", "Nonpolar"),
@@ -1871,7 +2183,7 @@ class AAComposition_analysis():
                                "Arg": ("#91D1C2FF", "s", "Basic"), 
                                "His": ("#91D1C2FF", "p", "Basic")}
         
-    def get_PCA_df(self, dtype="franction"):
+    def get_PCA_df(self, dtype="Fraction"):
         """
         Description
         ----------
@@ -1879,10 +2191,10 @@ class AAComposition_analysis():
         
         Parameters
         ----------
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         """
-        if dtype == "franction":
-            pca = self.AA_franction_pca
+        if dtype == "Fraction":
+            pca = self.AA_Fraction_pca
         else:
             pca = self.AA_count_pca
         PCA_df = pca.column_correlations
@@ -1891,7 +2203,7 @@ class AAComposition_analysis():
         PCA_df.index.name = "Species"
         return PCA_df
         
-    def get_COA_df(self, dtype="franction"):
+    def get_COA_df(self, dtype="Fraction"):
         """
         Description
         ----------
@@ -1899,12 +2211,12 @@ class AAComposition_analysis():
         
         Parameters
         ----------
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         """
-        if dtype == "franction":
-            ca = self.AA_franction_ca
-            ca_column = ca.column_coordinates(self.AA_franction_df)
-            ca_row = ca.row_coordinates(self.AA_franction_df)
+        if dtype == "Fraction":
+            ca = self.AA_Fraction_ca
+            ca_column = ca.column_coordinates(self.AA_Fraction_df)
+            ca_row = ca.row_coordinates(self.AA_Fraction_df)
         else:
             ca = self.AA_count_ca
             ca_column = ca.column_coordinates(self.AA_count_df)
@@ -1918,7 +2230,7 @@ class AAComposition_analysis():
         return COA_df
     
     def draw_heatmap(self, 
-                     dtype="franction",
+                     dtype="Fraction",
                      figsize=None, 
                      cmap="Blues",
                      ax=None,
@@ -1933,11 +2245,11 @@ class AAComposition_analysis():
         Description 
         -----------
         
-        Draw heatmap of count or franction.
+        Draw heatmap of count or Fraction.
         
         Parameters
         ----------
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         figsize: tuple of (width, height), optional
         cmap : matplotlib colormap name or object, or list of colors, optional
                The mapping from data values to color space. If not provided, the
@@ -1951,8 +2263,8 @@ class AAComposition_analysis():
         show_ylabels: {bool}
         show_xlabels: {bool}
         """
-        if dtype == "franction":
-            df = self.AA_franction_df
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
         else:
             df = self.AA_count_df
             
@@ -1969,7 +2281,7 @@ class AAComposition_analysis():
         return None
     
     def draw_clustermap(self, 
-                        dtype="franction",
+                        dtype="Fraction",
                         figsize=None, 
                         cmap="Blues",
                         ylabels_fontstyle='italic',
@@ -1984,12 +2296,12 @@ class AAComposition_analysis():
         Description 
         -----------
         
-        Draw clustermap of count or franction.
+        Draw clustermap of count or Fraction.
         
         Parameters
         ----------
         figsize: tuple of (width, height), optional
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         cmap : matplotlib colormap name or object, or list of colors, optional
                The mapping from data values to color space. If not provided, the
                default will depend on whether ``center`` is set.
@@ -2002,8 +2314,8 @@ class AAComposition_analysis():
         show_ylabels: {bool}
         show_xlabels: {bool}
         """
-        if dtype == "franction":
-            df = self.AA_franction_df
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
         else:
             df = self.AA_count_df
             
@@ -2024,7 +2336,7 @@ class AAComposition_analysis():
         return None
     
     def draw_boxplot(self,
-                     dtype="franction",
+                     dtype="Fraction",
                      figsize = None,
                      ax = None,
                      fontstyle = 'italic',
@@ -2034,19 +2346,19 @@ class AAComposition_analysis():
         Description 
         -----------
         
-        Draw boxplot of count or franction.
+        Draw boxplot of count or Fraction.
         
         Parameters
         ----------
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         figsize: tuple of (width, height), optional
         ax : matplotlib Axes, optional 
              Axes in which to draw the plot, otherwise use the currently-active Axes.
         fontstyle: {'normal', 'italic', 'oblique'}
         fontsize: 10
         """
-        if dtype == "franction":
-            df = self.AA_franction_df
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
         else:
             df = self.AA_count_df
             
@@ -2058,15 +2370,15 @@ class AAComposition_analysis():
         sns.boxplot(df, orient='h', ax=ax)
         ax.set_yticks(ax.get_yticks())
         ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
-        if xlabel == None and dtype == "franction":
-            xlabel = "franction"
+        if xlabel == None and dtype == "Fraction":
+            xlabel = "Fraction"
         if xlabel == None and dtype == "count":
             xlabel = "Count"
         ax.set_xlabel(xlabel)
         return None
     
     def draw_pearson_heatmap(self,
-                             dtype="franction",
+                             dtype="Fraction",
                              figsize=None, 
                              cmap="Blues",
                              labels_fontstyle='italic',
@@ -2077,11 +2389,11 @@ class AAComposition_analysis():
         Description 
         -----------
         
-        Draw pearson heatmap of count or franction.
+        Draw pearson heatmap of count or Fraction.
         
         Parameters
         ----------
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         figsize: tuple of (width, height), optional
         cmap : matplotlib colormap name or object, or list of colors, optional
                The mapping from data values to color space. If not provided, the
@@ -2091,8 +2403,8 @@ class AAComposition_analysis():
         labels_fontstyle: {'normal', 'italic', 'oblique'}
         labels_fontsize: 10
         """
-        if dtype == "franction":
-            df = self.AA_franction_df
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
         else:
             df = self.AA_count_df
             
@@ -2109,7 +2421,7 @@ class AAComposition_analysis():
         return None
     
     def draw_COA_plot(self,
-                      dtype="franction",
+                      dtype="Fraction",
                       figsize=(8,8),
                       species_labels_color="black", 
                       species_labels_style="italic", 
@@ -2139,7 +2451,7 @@ class AAComposition_analysis():
 
         Parameters
         ----------
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         show_species_labels: {bool, ["species1", "species2", ...]} show species name in plot.
         show_amino_acid_labels: {bool, ["codon1", "codon2", ...]} show amino acid in plot.
         figsize: (8,8)
@@ -2163,9 +2475,9 @@ class AAComposition_analysis():
         ylabel_size: 12
         ax: {None, Aexs}
         """
-        if dtype == "franction":
-            df = self.AA_franction_df
-            ca = self.AA_franction_ca
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+            ca = self.AA_Fraction_ca
             row_coords = ca.row_coordinates(df)
             col_coords = ca.column_coordinates(df)
         else:
@@ -2271,7 +2583,7 @@ class AAComposition_analysis():
     
     
     def draw_PCA_plot(self,
-                      dtype="franction",
+                      dtype="Fraction",
                       figsize=(6,6), 
                       labels_color="black", 
                       labels_style="italic", 
@@ -2297,7 +2609,7 @@ class AAComposition_analysis():
 
         Parameters
         ----------
-        dtype: {franction, count} Choose to use amino acid composition count or franction.
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
         show_legend: {bool}
         figsize: (6,6)
@@ -2314,8 +2626,8 @@ class AAComposition_analysis():
         ylabel {None, str}
         ax: {None, Aexs}
         """
-        if dtype == "franction":
-            pca = self.AA_franction_pca
+        if dtype == "Fraction":
+            pca = self.AA_Fraction_pca
         else:
             pca = self.AA_count_pca
             
@@ -2476,7 +2788,7 @@ class StopCodon_analysis():
         Description 
         -----------
         
-        Draw clustermap of count or franction.
+        Draw clustermap of count or Fraction.
         
         Parameters
         ----------
