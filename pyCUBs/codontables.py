@@ -525,6 +525,40 @@ class CodonTables:
         for codon in codontable:
             tmp.setdefault(codon, self.Seq3toSeq1[codontable[codon]])
         return tmp
-    
+        
+CBI_and_Fop_preset = {"Escherichia coli":
+                      ("Ikemura (1985) Mol. Biol. Evol. 2:13-34 (updated by INCBI 1991)", 
+                       ['TCT', 'TTC', 'TCC', 'TAC', 'TGC', 'CGT', 'CAC', 'CGC','CTG', 'CCG', 'CAG', 'ACT', 'ATC', 'ACC', 'AAC', 'AGC', 'AAA', 'GTT', 'GCT', 'GGT', 'GAC', 'GGC', 'GAA', 'GCG']
+                      ),
+                      "Bacillus subtilis":
+                      ("Sharp and Devine (1989) Nucl. Acids Res 17:5029-5039)",
+                       ['TCT', 'TTC', 'TAC', 'CTT', 'CCT', 'CGT', 'CGC', 'CCA','CAA', 'ACT', 'ATC', 'AAC', 'AAA', 'GTT', 'GCT', 'GGT','GAC', 'GTA', 'GAA']
+                      ),
+                      "Dictyostelium discoideum":
+                      ("Sharp and Devine (1989) Nucl. Acids Res 17:5029-5039)", 
+                       ['TTC', 'TAC', 'CGT', 'CTC', 'CAC', 'CCA', 'CAA', 'ATC', 'ACC', 'AAC', 'AAG', 'GGT', 'GTC', 'GCC', 'GAA']
+                      ),
+                      "Aspergillus nidulans":
+                      ("Lloyd and Sharp (1991) Mol. Gen. Genet 230: 288-294", 
+                       ['TTC', 'TCC', 'TAC', 'CGT', 'CTC', 'CCC', 'CAC', 'CGC', 'CAG', 'ATC', 'ACC', 'AAC', 'AAG', 'GCT', 'GGT', 'GTC', 'GCC', 'GAC', 'GAG']
+                      ),
+                      "Saccharomyces cerevisiae":
+                      ("Sharp and Cowe (1991) Yeast 7:657-678",
+                       ['TCT', 'TGT', 'TTC', 'TCC', 'TAC', 'TTG', 'CAC', 'CCA','CAA', 'ATT', 'ACT', 'ATC', 'ACC', 'AAC', 'AGA', 'AAG','GTT', 'GCT', 'GGT', 'GTC', 'GAC', 'GAA']
+                      ),
+                      "Drosophila melanogaster":
+                      ("Shields et al. (1988) Mol Biol Evol 5: 704-716", 
+                       ['TTC', 'TCC', 'TAC', 'TGC', 'CGT', 'CCC', 'CAC', 'CGC','CTG', 'CAG', 'ATC', 'ACC', 'AAC', 'AAG', 'GTC', 'GCC','GAC', 'GGC', 'GTG', 'GAG']
+                      ),
+                      "Caenorhabditis elegans":
+                      ("Stenico, Lloyd and Sharp Nuc. Acids Res. 22: 2437-2446(1994)",
+                       ['TTC', 'TCC', 'TAC', 'TGC', 'CTT', 'CGT', 'CTC', 'CAC', 'CGC', 'CCA', 'ATC', 'ACC', 'AAC', 'AAG', 'GCT', 'GTC','GCC', 'GAC', 'GGA', 'GAG']
+                      ),
+                      "Neurospora crassa": 
+                      ("Lloyd and Sharp (1993)",
+                       ['TCT', 'TTC', 'TCC', 'TAC', 'TGC', 'CGT', 'CTC', 'CCC','CAC', 'CGC', 'CAG', 'ACT', 'ATC', 'ACC', 'AAC', 'AAG','GGT', 'GTC', 'GCC', 'GAC', 'GGC', 'GAG']
+                      )
+                     }
+                     
 if __name__ == '__main__':
     print(CodonTables())
