@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-__author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2025/06/26"
+__author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2025/07/05"
 __all__ = ["translate",
            "get_Obs",
            "get_Fraction",
@@ -12,25 +12,31 @@ __all__ = ["translate",
            "get_Gravy",
            "get_Aromo",
            "get_RSCU",
-           "get_NC", 
+           "get_ENC",
            "get_PR2",
-           "get_GC123", 
+           "get_base_phase_synonymous",
+           "get_ATGC_Indices",
            "get_Relative_Adaptiveness", 
            "get_emboss_cutfile_from_Obs", 
            "get_Obs_from_emboss_cutfile",
+           "get_Obs_from_CUBE_file",
            "get_codonw_cai_file_from_Obs",
            "get_optimal_codons_from_codonw_coafile",
+           "get_optimal_codons_from_ENC"
            "draw_codon_barplot", 
            "get_cusp_like",
            "get_codonW_like",
            "find_four_codon_AA",
            "TreePlotter",
-           "NPA_analysis",
-           "ENC_analysis",
-           "PR2_analysis", 
-           "RSCU_analysis",
-           "AAComposition_analysis",
-           "StopCodon_analysis"]
+           "NPA_Analysis",
+           "ENC_Analysis",
+           "PR2_Analysis",
+           "Sequence_Indices_Analysis",
+           "RSCU_Single_Species_Analysis",
+           "RSCU_Multiple_Species_Analysis",
+           "AA_Composition_Single_Species_Analysis",
+           "AA_Composition_Multiple_Species_Analysis",
+           "Stop_Codon_Analysis"]
 
 __version__ = "v2.00"
 
@@ -44,13 +50,16 @@ import pandas as pd
 import seaborn as sns
 import scipy.stats as ss
 from fastaio import FastaIO
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch, Rectangle
 from collections import defaultdict
 from skbio import DistanceMatrix
 from skbio.tree import TreeNode, nj, upgma, gme, bme
 from scipy.spatial.distance import pdist, squareform
-from codontables import CodonTables, Seq3toSeq1, CBI_and_Fop_preset
+from codontables import CodonTables, Seq3toSeq1, CBI_and_Fop_preset, CAI_preset
+#mpl.rcParams['svg.fonttype'] = 'none'
+#mpl.rcParams['svg.hashsalt'] = 'hello'
 
 def translate(cds, genetic_code):
     """
@@ -67,7 +76,7 @@ def translate(cds, genetic_code):
     protein = ""
     codotable = CodonTables().get(genetic_code, aaseq3=False)
     for i in range(0, len(cds), 3):
-        protein += codotable.get(cds[i:i+3], "X")
+        protein += codotable.get(cds.upper()[i:i+3], "X")
     return protein
     
 def get_Obs(seqences, genetic_code, aaseq3=True):
@@ -85,8 +94,8 @@ def get_Obs(seqences, genetic_code, aaseq3=True):
     
     codontable = CodonTables().get(genetic_code, aaseq3)
     
-    def _FastaIO(inputfile):
-        for ID, Seq in FastaIO(inputfile):
+    def _FastaIO(file):
+        for ID, Seq in FastaIO(file):
             yield Seq
     
     if isinstance(seqences, str):
@@ -126,6 +135,219 @@ def get_Obs(seqences, genetic_code, aaseq3=True):
             Obs.setdefault(AA, {Codon: Codons.get(Codon, 0)})
     return Obs
 
+def get_ATGC_Indices(Obs):
+    """
+    Description
+    ----------
+    Calculate 58 indices, including the important GC3s, GC12, GC3, etc.
+    
+    A: A nucleotides content
+    T: T nucleotides content
+    G: G nucleotides content
+    C: C nucleotides content
+    GC: G and C nucleotides content
+    AT: A and T nucleotides content
+    GC-skew: GC skew
+    AT-skew: AT skew
+    A1: A nucleotides content at first codon postion
+    T1: T nucleotides content at first codon postion
+    G1: G nucleotides content at first codon postion
+    C1: C nucleotides content at first codon postion
+    GC1: G and C nucleotides content at first codon postion
+    AT1: A and T nucleotides content at first codon postion
+    GC1-skew: GC skew at first codon postion
+    AT1-skew: AT skew at first codon postion
+    A2: A nucleotides content at second codon postion
+    T2: T nucleotides content at second codon postion
+    G2: G nucleotides content at second codon postion
+    C2: C nucleotides content at second codon postion
+    GC2: G and C nucleotides content at second codon postion
+    AT2: A and T nucleotides content at second codon postion
+    GC2-skew: GC skew at second codon postion
+    AT2-skew: AT skew at second codon postion
+    A3: A nucleotides content at third codon postion
+    T3: T nucleotides content at third codon postion
+    G3: G nucleotides content at third codon postion
+    C3: C nucleotides content at third codon postion
+    GC3: G and C nucleotides content at third codon postion
+    AT3: A and T nucleotides content at third codon postion
+    GC3-skew: GC skew at third codon postion
+    AT3-skew: AT skew at third codon postion
+    GC12: G and C nucleotides content at first + second codon postions
+    A1s: A content at the first synonymous codon position
+    T1s: T content at the first synonymous codon position
+    G1s: G content at the first synonymous codon position
+    C1s: C content at the first synonymous codon position
+    GC1s: G and C content at the first synonymous codon position
+    AT1s: A and T content at the first synonymous codon position
+    A2s: A content at the second synonymous codon position
+    T2s: T content at the second synonymous codon position
+    G2s: G content at the second synonymous codon position
+    C2s: C content at the second synonymous codon position
+    GC2s: G and C content at the second synonymous codon position
+    AT2s: A and T content at the second synonymous codon position
+    A3s: A content at the third synonymous codon position
+    T3s: T content at the third synonymous codon position
+    G3s: G content at the third synonymous codon position
+    C3s: C content at the third synonymous codon position
+    GC3s: G and C content at the third synonymous codon position
+    AT3s: G and C content at the third synonymous codon position
+    GC12s: G and C content at the first + second synonymous codon position
+    L_sym: Number of silent sites
+    L_aa: Number of amino acids
+    
+    The following four indices have codow definitions, It quantifies the usage of each nucleotide at synonymous third codon positions as a proportion of the maximum usage of that nucleotide could have without altering the amino acid composition. 
+    A3s codonW: A3s with codonW definition
+    T3s codonW: T3s with codonW definition
+    G3s codonW: G3s with codonW definition
+    C3s codonW: C3s with codonW definition
+    
+    Parameters
+    ----------
+    Obs: get_Obs function return value.
+    """
+    ATGC1 = defaultdict(int)
+    ATGC2 = defaultdict(int)
+    ATGC3 = defaultdict(int)    
+    ATGC1s = defaultdict(int)
+    ATGC2s = defaultdict(int)
+    ATGC3s = defaultdict(int)
+    for aa in Obs:
+        for c in Obs[aa]:
+            ATGC1[c[0]] += Obs[aa][c]
+            ATGC2[c[1]] += Obs[aa][c]
+            ATGC3[c[2]] += Obs[aa][c]
+        if aa == "*":
+            continue
+        elif len(Obs[aa]) < 2:
+            continue
+        else:
+            for c in Obs[aa]:
+                ATGC1s[c[0]] += Obs[aa][c]
+                ATGC2s[c[1]] += Obs[aa][c]
+                ATGC3s[c[2]] += Obs[aa][c]
+                
+    A1, T1, G1, C1 = ATGC1.get("A", 0), ATGC1.get("T", 0), ATGC1.get("G", 0), ATGC1.get("C", 0)
+    A2, T2, G2, C2 = ATGC2.get("A", 0), ATGC2.get("T", 0), ATGC2.get("G", 0), ATGC2.get("C", 0)
+    A3, T3, G3, C3 = ATGC3.get("A", 0), ATGC3.get("T", 0), ATGC3.get("G", 0), ATGC3.get("C", 0)
+    ATGC1_Total,  ATGC2_Total, ATGC3_Total = sum(ATGC1.values()), sum(ATGC2.values()), sum(ATGC3.values())
+    GC1_skew, AT1_skew = (G1 - C1) / (G1 + C1), (A1 - T1) / (A1 + T1)
+    GC2_skew, AT2_skew = (G2 - C2) / (G2 + C2), (A2 - T2) / (A2 + T2)
+    GC3_skew, AT3_skew = (G3 - C3) / (G3 + C3), (A3 - T3) / (A3 + T3)
+    
+    if ATGC1_Total!=0:
+        GC1, AT1 = (G1 + C1)/ATGC1_Total, (A1 + T1)/ATGC1_Total
+    else:
+        GC1, AT1 = None, None
+    if ATGC2_Total!=0:
+        GC2, AT2 = (G2 + C2)/ATGC2_Total, (A2 + T2)/ATGC2_Total
+    else:
+        GC2, AT2 = None, None
+    if ATGC3_Total!=0:
+        GC3, AT3 = (G3 + C3)/ATGC3_Total, (A3 + T3)/ATGC3_Total
+    else:
+        GC3, AT3 = None, None
+    if GC1 != None and GC2 !=None:
+        GC12 = (GC1 + GC2)/2
+    else:
+        GC12 = None
+        
+    A1s, T1s, G1s, C1s = ATGC1s.get("A", 0), ATGC1s.get("T", 0), ATGC1s.get("G", 0), ATGC1s.get("C", 0)
+    A2s, T2s, G2s, C2s = ATGC2s.get("A", 0), ATGC2s.get("T", 0), ATGC2s.get("G", 0), ATGC2s.get("C", 0)
+    A3s, T3s, G3s, C3s = ATGC3s.get("A", 0), ATGC3s.get("T", 0), ATGC3s.get("G", 0), ATGC3s.get("C", 0)
+    ATGC1s_Total, ATGC2s_Total, ATGC3s_Total = sum(ATGC1s.values()), sum(ATGC2s.values()), sum(ATGC3s.values())
+    
+    if ATGC1s_Total!=0:
+        GC1s, AT1s = (G1s + C1s)/ATGC1s_Total, (A1s + T1s)/ATGC1s_Total
+    else:
+        GC1s, AT1s = None, None
+    if ATGC2s_Total!=0:
+        GC2s, AT2s = (G2s + C2s)/ATGC2s_Total, (A2s + T2s)/ATGC2s_Total
+    else:
+        GC2s, AT2s = None, None
+    if ATGC3s_Total!=0:
+        GC3s, AT3s = (G3s + C3s)/ATGC3s_Total, (A3s + T3s)/ATGC3s_Total
+    else:
+        GC3s, AT3s = None, None
+    if GC1s != None and GC2s !=None:
+        GC12s = (GC1s + GC2s)/2
+    else:
+        GC12s = None
+    
+    L_sym = ATGC3s_Total
+    L_aa = sum([Obs[aa][c] for aa in Obs if aa != "*" for c in Obs[aa]])
+
+    A = ATGC1.get('A', 0) + ATGC2.get("A", 0) + ATGC3.get("A", 0)
+    T = ATGC1.get('T', 0) + ATGC2.get("T", 0) + ATGC3.get("T", 0)
+    G = ATGC1.get('G', 0) + ATGC2.get("G", 0) + ATGC3.get("G", 0)
+    C = ATGC1.get('C', 0) + ATGC2.get("C", 0) + ATGC3.get("C", 0)
+    Total_Base = A + T + G + C
+    
+    A3s_codonW = get_base_phase_synonymous(Obs, base="A", phase=2)
+    T3s_codonW = get_base_phase_synonymous(Obs, base="T", phase=2)
+    G3s_codonW = get_base_phase_synonymous(Obs, base="G", phase=2)
+    C3s_codonW = get_base_phase_synonymous(Obs, base="C", phase=2)
+    
+    return {"A":A / Total_Base,
+            "T":T / Total_Base,
+            "G":G / Total_Base,
+            "C":C / Total_Base,
+            "GC":(G + C) / Total_Base,
+            "AT":(A + T) / Total_Base,
+            "GC-skew":(G - C) / (G + C),
+            "AT-skew":(A - T) / (A + T),
+            "A1":A1 / ATGC1_Total,
+            "T1":T1 / ATGC1_Total,
+            "G1":G1 / ATGC1_Total,
+            "C1":C1 / ATGC1_Total,
+            "GC1":GC1,
+            "AT1":AT1,
+            "GC1-skew":GC1_skew,
+            "AT1-skew":AT1_skew,
+            "A2":A2 / ATGC2_Total,
+            "T2":T2 / ATGC2_Total,
+            "G2":G2 / ATGC2_Total,
+            "C2":C2 / ATGC2_Total,
+            "GC2":GC2,
+            "AT2":AT2,
+            "GC2-skew":GC2_skew,
+            "AT2-skew":AT2_skew,
+            "A3":A3 / ATGC3_Total,
+            "T3":T3 / ATGC3_Total,
+            "G3":G3 / ATGC3_Total,
+            "C3":C3 / ATGC3_Total,
+            "GC3":GC3,
+            "AT3":AT3,
+            "GC3-skew":GC3_skew,
+            "AT3-skew":AT3_skew,
+            "GC12":GC12,
+            "A1s":A1s / ATGC1s_Total,
+            "T1s":T1s / ATGC1s_Total,
+            "G1s":G1s / ATGC1s_Total,
+            "C1s":C1s / ATGC1s_Total,
+            "GC1s":GC1s,
+            "AT1s":AT1s,
+            "A2s":A2s / ATGC2s_Total,
+            "T2s":T2s / ATGC2s_Total,
+            "G2s":G2s / ATGC2s_Total,
+            "C2s":C2s / ATGC2s_Total,
+            "GC2s":GC2s,
+            "AT2s":AT2s,
+            "A3s":A3s / ATGC3s_Total,
+            "T3s":T3s / ATGC3s_Total,
+            "G3s":G3s / ATGC3s_Total,
+            "C3s":C3s / ATGC3s_Total,
+            "GC3s":GC3s,
+            "AT3s":AT3s,
+            "GC12s":GC12s,
+            "A3s codonW": A3s_codonW,
+            "T3s codonW": T3s_codonW,
+            "G3s codonW": G3s_codonW,
+            "C3s codonW": C3s_codonW,
+            "L_sym": L_sym,
+            "L_aa": L_aa
+           }
+
 def get_codonw_caifile_from_Obs(Obs, outfile=None):
     """
     Description
@@ -135,6 +357,7 @@ def get_codonw_caifile_from_Obs(Obs, outfile=None):
     Parameters
     ----------
     Obs: get_Obs function return value.
+    outfile: A path of outfile.
     """
     
     RA = get_Relative_Adaptiveness(Obs)
@@ -167,6 +390,7 @@ def get_emboss_cutfile_from_Obs(Obs, outfile=None):
     Parameters
     ----------
     Obs: get_Obs function return value.
+    outfile: A path of outfile.
     """
     
     Frequency = get_Frequency(Obs)
@@ -219,6 +443,43 @@ def get_Obs_from_emboss_cutfile(file, aaseq3=True):
                     Obs.setdefault(aa, {l[0]: int(l[4])})
     return Obs
 
+def get_Obs_from_CUBE_file(file, aaseq3=True):
+    """
+    Description
+    ----------
+    Gets the Obs object from the CUBE (https://www.codonbias.cn/) file with the same value as the get_Obs function returns.
+    
+    Parameters
+    ----------
+    file : A CUBE file from https://www.codonbias.cn/download
+    aaseq3: If value is True, amino acid three letter code.
+    """
+    Seq1toSeq3 = {Seq3toSeq1[k]:k for k in Seq3toSeq1}
+    Obs = {}
+    with open(file, 'r') as f:
+        for l in f:
+            if l.strip() != '' and not l.startswith('#'):
+                l = l.strip('\n').split()
+                if aaseq3==True:
+                    if l[0] in Seq1toSeq3:
+                        aa = Seq1toSeq3[l[0]]
+                    elif l[0] == 'STOP':
+                        aa = '*'
+                    else:
+                        continue
+                else:
+                    if l[0] in Seq1toSeq3:
+                        aa = l[0]
+                    elif l[0] =="STOP":
+                        aa = "*"
+                    else:
+                        continue
+                if aa not in Obs:
+                    Obs.setdefault(aa, {l[1]:int(l[2])})
+                else:
+                    Obs[aa][l[1]] = int(l[2])
+    return Obs
+
 def get_optimal_codons_from_codonw_coafile(file):
     """
     Description 
@@ -248,6 +509,74 @@ def get_optimal_codons_from_codonw_coafile(file):
             cs.append(c)
     return sorted(cs)
 
+def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_rscu=0.08):
+    """
+    Description 
+    ----------
+    According to the ENC value, the optimal codon is selected.
+    Usually, the codons with RSCU > 1 and delta RSCU (ΔRSCU) > 0.08 were defined as the optimal codons of the gene.
+    
+    Parameters
+    ----------
+    file: A fasta or fasta.gz format file path.
+    genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+    ratio: {0-1}, How many sequences were selected from the genes with high and low ENC values to establish low and high bias gene groups.
+    rscu: default=1, Lower limit of RSCU in low ENC group.
+    delta_rscu: delta_rscu=0.08, delta RSCU = RSCU in low ENC group - RSCU in high ENC group.
+    
+    Reference
+    ----------
+    [1] Zhang, Kun, et al. "Codon usage characterization and phylogenetic analysis of the mitochondrial genome in Hemerocallis citrina." BMC Genomic Data 25.1 (2024): 6.
+    [2] Wu, Peng, et al. "Comprehensive analysis of codon bias in 13 Ganoderma mitochondrial genomes." Frontiers in Microbiology 14 (2023): 1170790.
+    [3] Gao, Wei, et al. "Intraspecific and interspecific variations in the synonymous codon usage in mitochondrial genomes of 8 pleurotus strains." BMC genomics 25.1 (2024): 456.
+    """
+    
+    ENC_dict = {}
+    for ID, Seq in FastaIO(file):
+        Obs = get_Obs(Seq, genetic_code=genetic_code)
+        enc = get_ENC(Obs)
+        if enc != None:
+            ENC_dict.setdefault(ID, enc)
+
+    low_enc_critical_value =  sorted(list(ENC_dict.values()))[math.floor(len(ENC_dict) * ratio)]
+    high_enc_critical_value = sorted(list(ENC_dict.values()), reverse=True)[math.floor(len(ENC_dict) * ratio)]
+    
+    low_enc_seq_list = []
+    high_enc_seq_list = []
+    
+    for ID, Seq in FastaIO(file):
+        if ID in ENC_dict:
+            if ENC_dict[ID] >= high_enc_critical_value:
+                high_enc_seq_list.append(Seq)
+            #if ENC_dict[ID] < low_enc_critical_value:
+            if ENC_dict[ID] <= low_enc_critical_value:
+                low_enc_seq_list.append(Seq)
+    
+    low_RSCU = get_RSCU(get_Obs(low_enc_seq_list, genetic_code=genetic_code))
+    high_RSCU = get_RSCU(get_Obs(high_enc_seq_list, genetic_code=genetic_code))
+    
+    aa_list = []
+    codon_list = []
+    low_enc_RSCU_list = []
+    high_enc_RSCU_list = []
+    for aa in low_RSCU.RSCU_dict:
+        if aa !="*" and len(low_RSCU.RSCU_dict[aa]) >1:
+            for c in low_RSCU.RSCU_dict[aa]:
+                aa_list.append(aa)
+                codon_list.append(c)
+                low_enc_RSCU_list.append(low_RSCU.RSCU_dict[aa][c])
+                high_enc_RSCU_list.append(high_RSCU.RSCU_dict[aa][c])
+                
+    df = pd.DataFrame({
+        'Amino acid': aa_list,
+        'Codon': codon_list,
+        'RSCU of low ENC group': low_enc_RSCU_list,
+        'RSCU of high ENC group': high_enc_RSCU_list
+    })
+    df['Delta RSCU'] = df['RSCU of low ENC group'] - df['RSCU of high ENC group']
+    df["Optimal codon"] = (df["RSCU of low ENC group"] > rscu) & (df["Delta RSCU"] > delta_rscu)
+    return df
+
 def get_Fop(Obs, optimal_codons="Escherichia coli"):
     """
     Description 
@@ -261,6 +590,7 @@ def get_Fop(Obs, optimal_codons="Escherichia coli"):
     ----------
     Obs: get_Obs function return value.
     optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile function,
+                    or return value from get_optimal_codons_from_ENC() function,
                     or it can be a preset value from the codonw software, such as {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}
                     or it can be a custom list containing the best codons.
     Reference
@@ -274,6 +604,8 @@ def get_Fop(Obs, optimal_codons="Escherichia coli"):
             optimal_codons = CBI_and_Fop_preset[optimal_codons][1]
         else:
             raise TypeError('Preset in {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}')
+    elif isinstance(optimal_codons, pd.core.frame.DataFrame):
+        optimal_codons = optimal_codons[optimal_codons["Optimal codon"]]["Codon"].tolist()
     elif isinstance(optimal_codons, list):
         pass
     
@@ -310,8 +642,12 @@ def get_CBI(Obs, optimal_codons="Escherichia coli"):
     Parameters
     ----------
     Obs: get_Obs function return value.
-    optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile function,
-                    or it can be a preset value from the codonw software, such as {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}
+    optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile() function,
+                    or return value from get_optimal_codons_from_ENC() function,
+                    or it can be a preset value from the codonw software, such as {"Escherichia coli", 
+                    "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans",
+                    "Saccharomyces cerevisiae", "Drosophila melanogaster",
+                    "Caenorhabditis elegans", "Neurospora crassa"}
                     or it can be a custom list containing the best codons.
     Reference
     ----------
@@ -323,6 +659,8 @@ def get_CBI(Obs, optimal_codons="Escherichia coli"):
             optimal_codons = CBI_and_Fop_preset[optimal_codons][1]
         else:
             raise TypeError('Preset in {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}')
+    elif isinstance(optimal_codons, pd.core.frame.DataFrame):
+        optimal_codons = optimal_codons[optimal_codons["Optimal codon"]]["Codon"].tolist()
     elif isinstance(optimal_codons, list):
         pass
     
@@ -350,11 +688,10 @@ def get_CBI(Obs, optimal_codons="Escherichia coli"):
 
 def get_Relative_Adaptiveness(Obs):
     """
-    
     Description
     ----------
     Relative adaptiveness (w) from codonW (by John Peden).
-
+    
     Parameters
     ----------
     Obs: get_Obs function return value.
@@ -375,7 +712,8 @@ def get_Relative_Adaptiveness(Obs):
                          remove_stop_codon=True,
                          figsize=(8,4),
                          codon_space = 0.16,
-                         ax=None):
+                         ax=None, 
+                         outfile=None):
             """
             Description
             ----------
@@ -392,11 +730,12 @@ def get_Relative_Adaptiveness(Obs):
             remove_stop_codon: {bool} remove stop codon.
             ax: {None, Aexs}
             codon_space: {0-1} codon spacing.
+            outfile: A path of outfile.
             """
             draw_codon_barplot(self.Relative_Adaptiveness_dict, ylabel=ylabel, title=title, 
                                color_preset=color_preset, width=width,
                                remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space)
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
             return None
     
         def __str__(self):
@@ -442,19 +781,23 @@ def get_CAI(Obs, ref_Obs, model="codonw", genetic_code=None):
     ----------
     Obs : get_Obs function return value. Observed number of occurrences of codon in a query gene.
     ref_Obs : get_Obs function return value. Observed number of occurrences of codon in a reference set of genes.
+              Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
     model : {emboss, codonw} if model==emboss, Non-synonymous codons and termination codons (dependent on genetic code) are unexcluded. 
                              if model==codonw, Non-synonymous codons and termination codons (dependent on genetic code) are excluded. 
     References
     ----------
     [1] Sharp, Paul M., and Wen-Hsiung Li. "The codon adaptation index-a measure of directional synonymous codon usage bias, and its potential applications." Nucleic acids research 15.3 (1987): 1281-1295.
     """
-    
-    Relative_Adaptiveness = get_Relative_Adaptiveness(ref_Obs)
+    if isinstance(ref_Obs, str):
+        Relative_Adaptiveness = CAI_preset[ref_Obs][1]
+    elif isinstance(ref_Obs, dict):
+        Relative_Adaptiveness = get_Relative_Adaptiveness(ref_Obs).Relative_Adaptiveness_dict
+    Relative_Adaptiveness = {c:Relative_Adaptiveness[aa][c] for aa in Relative_Adaptiveness for c in Relative_Adaptiveness[aa]}
     w_list = []
     if model == "emboss":
         for aa in Obs:
             for c in Obs[aa]:
-                w = Relative_Adaptiveness.Relative_Adaptiveness_dict[aa][c]
+                w = Relative_Adaptiveness[c]
                 if w != 0:
                     w_list.extend([w]*Obs[aa][c])
                 else:
@@ -464,7 +807,7 @@ def get_CAI(Obs, ref_Obs, model="codonw", genetic_code=None):
         for aa in Obs:
             if aa !="*" and len(Obs[aa].keys()) !=1:
                 for c in Obs[aa]:
-                    w = Relative_Adaptiveness.Relative_Adaptiveness_dict[aa][c]
+                    w = Relative_Adaptiveness[c]
                     if w != 0:
                         w_list.extend([w]*Obs[aa][c])
                     else:
@@ -479,8 +822,7 @@ def get_Gravy(Obs):
     ----------
     The general average hydropathicity or (GRAVY) score, for the hypothetical translated gene product.
     It is calculated as the arithmetic mean of the sum of the hydropathic indices of each amino acid.
-    The more the Gravy value is biased towards a negative value, the stronger the hydrophilicity of the protein;
-    the more the Gravy value is biased towards a positive value, the stronger the hydrophobicity of the protein
+    The more the Gravy value is biased towards a negative value, the stronger the hydrophilicity of the protein.
     
     Parameters
     ----------
@@ -507,9 +849,9 @@ def get_Aromo(Obs):
     """
     Description
     ----------
-    Aromaticity score of protein. This is the frequency of aromatic amino  acids (Phe, Tyr, Trp)
+    Aromaticity score of protein. This is the frequency of aromatic amino acids (Phe, Tyr, Trp)
     in the hypothetical translated gene product.
-
+    
     Parameters
     ----------
     Obs: get_Obs function return value.
@@ -553,7 +895,8 @@ def get_RSCU(Obs):
                          remove_stop_codon=True,
                          figsize=(8,4),
                          codon_space = 0.16,
-                         ax=None):
+                         ax=None,
+                         outfile=None):
             """
             Description
             ----------
@@ -570,11 +913,12 @@ def get_RSCU(Obs):
             remove_stop_codon: {bool} remove stop codon.
             ax: {None, Aexs}
             codon_space: {0-1} codon spacing.
+            outfile: A path of outfile.
             """
             draw_codon_barplot(self.RSCU_dict, ylabel=ylabel, title=title, 
                                color_preset=color_preset, width=width,
                                remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space)
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
             return None
     
         def __str__(self):
@@ -637,7 +981,7 @@ def get_Fraction(Obs):
                          remove_stop_codon=True,
                          figsize=(8,4),
                          codon_space = 0.16,
-                         ax=None):
+                         ax=None, outfile=None):
             """
             Description
             ----------
@@ -654,11 +998,12 @@ def get_Fraction(Obs):
             remove_stop_codon: {bool} remove stop codon.
             ax: {None, Aexs}
             codon_space: {0-1} codon spacing.
+            outfile: A path of outfile.
             """
             draw_codon_barplot(self.Fraction_dict, ylabel=ylabel, title=title, 
                                color_preset=color_preset, width=width,
                                remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space)
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
             return None
     
         def __str__(self):
@@ -721,7 +1066,8 @@ def get_Frequency(Obs):
                          remove_stop_codon=True,
                          figsize=(8,4),
                          codon_space=0.16,
-                         ax=None):
+                         ax=None,
+                         outfile=None):
             """
             Description
             ----------
@@ -738,11 +1084,12 @@ def get_Frequency(Obs):
             remove_stop_codon: {bool} remove stop codon.
             ax: {None, Aexs}
             codon_space: {0-1} codon spacing.
+            outfile: A path of outfile.
             """
             draw_codon_barplot(self.Frequency_dict, ylabel=ylabel, title=title, 
                                color_preset=color_preset, width=width,
                                remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space)
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
             return None
     
         def __str__(self):
@@ -779,7 +1126,8 @@ def draw_codon_barplot(obj,
                        remove_stop_codon=True,
                        figsize=(8,4),
                        codon_space=0.16,
-                       ax=None):
+                       ax=None,
+                       outfile=None):
     """
     Description
     ----------
@@ -795,6 +1143,7 @@ def draw_codon_barplot(obj,
     color_preset: ["Set1", "Set2", "Set3", "tab10", "tab20", "tab20b", "tab20c", "Dark2"]
     remove_stop_codon: {bool} remove stop codon.
     ax: {None, Aexs}
+    outfile: A path of outfile.
     """
     
     if isinstance(obj, dict):
@@ -848,9 +1197,11 @@ def draw_codon_barplot(obj,
     ax.margins(x=0.01)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
+    if outfile != None:
+        fig.savefig(outfile, dpi=600)
     return None
 
-def get_cusp_like(Obs, human_format=False):
+def get_cusp_like(Obs, human_format=False, outfile=None):
     """
     Description
     ----------
@@ -860,67 +1211,50 @@ def get_cusp_like(Obs, human_format=False):
     ----------  
     Obs: get_Obs function return value.
     human_format: {bool} if value is True, return human readable format.
+    outfile: A path of outfile. 
     
     Reference
     ----------
     Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
     """
-    
-    ATGC1 = {}
-    ATGC2 = {}
-    ATGC3 = {}
-    ATGC3_2d = {}
-    ATGC3_4d = {}
-    ATGC3_2d_4d = {}
-    for AA in Obs:
-        for Codon in Obs[AA]:
-            if Codon[0] not in ATGC1:
-                ATGC1.setdefault(Codon[0], Obs[AA][Codon])
-            else:
-                ATGC1[Codon[0]] += Obs[AA][Codon]
-            if Codon[1] not in ATGC2:
-                ATGC2.setdefault(Codon[1], Obs[AA][Codon])
-            else:
-                ATGC2[Codon[1]] += Obs[AA][Codon]
-            if Codon[2] not in ATGC3:
-                ATGC3.setdefault(Codon[2], Obs[AA][Codon])
-            else:
-                ATGC3[Codon[2]] += Obs[AA][Codon]
-    Total_base_num = sum(ATGC1.values()) + sum(ATGC2.values())+sum(ATGC3.values())
-    GC = (ATGC1.get('C', 0) + ATGC1.get('G', 0) + ATGC2.get('C', 0) + ATGC2.get('G', 0) + ATGC3.get('C', 0) + ATGC3.get('G', 0))/Total_base_num
-    GC1 = (ATGC1.get('C', 0) + ATGC1.get('G', 0))/sum(ATGC1.values())
-    GC2 = (ATGC2.get('C', 0) + ATGC2.get('G', 0))/sum(ATGC2.values())
-    GC3 = (ATGC3.get('C', 0) + ATGC3.get('G', 0))/sum(ATGC3.values())
+    res = get_ATGC_Indices(Obs)
+    GC, GC1, GC2, GC3 = res["GC"], res["GC1"], res["GC2"], res["GC3"]
     Fraction = get_Fraction(Obs)
     Frequency = get_Frequency(Obs)
     CupsResult = [{"Coding GC": GC,
                    "1st letter GC": GC1,
                    "2nd letter GC": GC2,
                    "3rd letter GC": GC3}, 
-                  {"Fraction": Fraction,
-                   "Frequency":Frequency,
+                  {"Fraction": Fraction.Fraction_dict,
+                   "Frequency":Frequency.Frequency_dict,
                    "Number": Obs}
                  ]
     
-    if human_format:
-        out = io.StringIO()
-        for k in CupsResult[0]:
-            print('#'+k, str(round(CupsResult[0][k]*100, 2))+'%', file=out)
-        print('\n#Codon AA Fraction Frequency Number', file=out)
-        for AA in CupsResult[1]['Number']:
-            for Codon in CupsResult[1]['Fraction'][AA]:
-                print(Codon, AA, 
-                      round(CupsResult[1]['Fraction'][AA][Codon], 3),
-                      round(CupsResult[1]['Frequency'][AA][Codon], 3),
-                      CupsResult[1]['Number'][AA][Codon], sep='\t', file=out)
-        out.seek(0)
-        CupsResult = out.read()
+    out = io.StringIO()
+    for k in CupsResult[0]:
+        print('#'+k, str(round(CupsResult[0][k]*100, 2))+'%', file=out)
+    print('\n#Codon AA Fraction Frequency Number', file=out)
+    for AA in CupsResult[1]['Number']:
+        for Codon in CupsResult[1]['Fraction'][AA]:
+            print(Codon, AA, 
+                  round(CupsResult[1]['Fraction'][AA][Codon], 3),
+                  round(CupsResult[1]['Frequency'][AA][Codon], 3),
+                  CupsResult[1]['Number'][AA][Codon], sep='\t', file=out)
+    out.seek(0)
+    CupsResult_human_format = out.read()
+    out.close()
+    
+    if outfile!=None:
+        out = open(outfile, 'w')
+        print(CupsResult_human_format, file=out)
         out.close()
-        return CupsResult
-    else:
-        return CupsResult
+    else:   
+        if human_format:
+            return CupsResult_human_format
+        else:
+            return CupsResult
 
-def get_codonW_like(Obs, human_format=False):
+def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optimal_codons="Escherichia coli", outfile=None):
     """
     Description
     ----------
@@ -928,171 +1262,97 @@ def get_codonW_like(Obs, human_format=False):
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
-    human_format: {bool} if value is True, return human readable format.
+    file: A fasta or fasta.gz format file path.
+    genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+    cai_ref_Obs: get_Obs function return value. Observed number of occurrences of codon in a reference set of genes.
+                 Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
+    optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile function,
+                    or it can be a preset value from the codonw software, such as {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}
+                    or it can be a custom list containing the best codons.
+    outfile: A path of outfile. 
     
     Reference
     ----------
     [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
     
-    def X3s(Obs, base=["A", "T", "G", "C"]):
-        X3s_Obs = {}
-        for AA in Obs:
-            for Codon in Obs[AA]:
-                if Codon[2] == base:
-                    X3s_Obs.setdefault(AA, Obs[AA])
-                    continue
-        X3s_codons = {}
-        for AA in X3s_Obs:
-                if AA in ['*']:
-                    continue
-                if len(X3s_Obs[AA]) < 2:
-                    continue
-                for Codon in Obs[AA]:
-                    if Codon[2] not in X3s_codons:
-                        X3s_codons.setdefault(Codon[2], Obs[AA][Codon])
-                    else:
-                        X3s_codons[Codon[2]] += Obs[AA][Codon]
-        return X3s_codons.get(base, 0)/sum(X3s_codons.values())
-    
-    ATGC = {}
-    for AA in Obs:
-        if AA in ['*']:
-            continue
-        for Codon in Obs[AA]:
-            if Codon[0] not in ATGC:
-                ATGC.setdefault(Codon[0], Obs[AA][Codon])
-            else:
-                ATGC[Codon[0]] += Obs[AA][Codon]
-            if Codon[1] not in ATGC:
-                ATGC.setdefault(Codon[1], Obs[AA][Codon])
-            else:
-                ATGC[Codon[1]] += Obs[AA][Codon]
-            if Codon[2] not in ATGC:
-                ATGC.setdefault(Codon[2], Obs[AA][Codon])
-            else:
-                ATGC[Codon[2]] += Obs[AA][Codon]
-    
-    GC = (ATGC.get('C', 0) + ATGC.get('G', 0))/sum(ATGC.values())
-    L_aa = int(sum(ATGC.values())/3)
-    
-    ATGC3s = {}
-    for AA in Obs:
-        if AA in ['*']:
-            continue
-        if len(Obs[AA]) < 2:
-            continue
-        for Codon in Obs[AA]:
-            if Codon[2] not in ATGC3s:
-                ATGC3s.setdefault(Codon[2], Obs[AA][Codon])
-            else:
-                ATGC3s[Codon[2]] += Obs[AA][Codon]
-    GC3s= ATGC3s.get('G', 0)/sum(ATGC3s.values()) + ATGC3s.get('C', 0)/sum(ATGC3s.values())
-    L_sym = sum(ATGC3s.values())
-    
     #GCn3 = (GC - G3s -C3s )/(L_aa *3 - L_sym)
+    tmp = []
+    for record in FastaIO(file):
+        Obs = get_Obs(record[1], genetic_code=genetic_code)
+        CAI = get_CAI(Obs, ref_Obs=cai_ref_Obs, model="codonw", genetic_code=genetic_code)
+        Fop = get_Fop(Obs, optimal_codons)
+        CBI = get_CBI(Obs, optimal_codons)
+        res = get_ATGC_Indices(Obs)
+        Nc = get_ENC(Obs)
+        Gravy = get_Gravy(Obs)
+        Aromo = get_Aromo(Obs)
+        tmp.append(pd.DataFrame({"T3s":[round(res["T3s codonW"], 4)],
+                                 "C3s":[round(res["C3s codonW"], 4)],
+                                 "A3s":[round(res["A3s codonW"], 4)],
+                                 "G3s":[round(res["G3s codonW"], 4)],
+                                 "CAI":[round(CAI, 3)],
+                                 "CBI":[round(CBI, 3)],
+                                 "Fop":[round(Fop, 3)],
+                                 "Nc":[None if Nc == None else round(Nc, 2)],
+                                 "GC3s":[round(res["GC3s"], 3)],
+                                 "GC":[round(res["GC"], 3)],
+                                 "L_sym":[res["L_sym"]],
+                                 "L_aa":[res["L_aa"]],
+                                 "Gravy":[round(Gravy, 6)],
+                                 "Aromo":[round(Aromo, 6)]}, index=[record[0]]))
+    df = pd.concat(tmp)
+    df.index.name = 'title'
     
-    A3s = X3s(Obs, base="A")
-    T3s = X3s(Obs, base="T")
-    G3s = X3s(Obs, base="G")
-    C3s = X3s(Obs, base="C")
-    
-    Nc = get_NC(Obs)
-    
-    Gravy = get_Gravy(Obs)
-    Aromo = get_Aromo(Obs)
-    
-    codonWResult = {"A3s":A3s, "T3s":T3s, "G3s":G3s, "C3s":C3s, "GC3s": GC3s, "GC": GC,
-                    "Nc": Nc, 'L_sym': L_sym, 'L_aa':L_aa, 'Gravy': Gravy, 'Aromo': Aromo}
-    if human_format:
-        out = io.StringIO()
-        print("{:<6s}".format("T3s"),
-              "{:<6s}".format("C3s"),
-              "{:<6s}".format("A3s"),
-              "{:<6s}".format("G3s"),
-              "{:<6s}".format("Nc"),
-              "{:<6s}".format("GC3s"),
-              "{:<6s}".format("GC"),
-              "{:<6s}".format("L_sym"), 
-              "{:<6s}".format("L_aa"), 
-              "{:<6s}".format("Gravy"),
-              "{:<6s}".format("Aromo"),
-              file=out,
-             )
-        
-        print("{:<6.4f}".format(round(codonWResult["T3s"], 4)), 
-              "{:<6.4f}".format(round(codonWResult["C3s"], 4)), 
-              "{:<6.4f}".format(round(codonWResult["A3s"], 4)), 
-              "{:<6.4f}".format(round(codonWResult["G3s"], 4)),
-              "{:<6.2f}".format(round(codonWResult["Nc"], 2)),
-              "{:<6.3f}".format(round(codonWResult["GC3s"], 3)), 
-              "{:<6.3f}".format(round(codonWResult["GC"], 3)),
-              "{:<6}".format(codonWResult["L_sym"]), 
-              "{:<6}".format(codonWResult["L_aa"]),
-              "{:<6.6f}".format(codonWResult["Gravy"]),
-              "{:<6.6f}".format(codonWResult["Aromo"]),
-              file=out,
-             )
-        out.seek(0)
-        codonWResult = out.read()
-        out.close()
-    return codonWResult
+    del tmp
+    if outfile!=None:
+        df.to_csv(outfile, sep='\t', index=True)
+    else:
+        return df
 
-def get_GC123(Obs, sym=True):
+def get_base_phase_synonymous(Obs, base=["A", "T", "G", "C"][2], phase=[0,1,2][2]):
     """
     Description
     ----------
-    Return GC1, GC2, GC3, GC12 value.
+    Calculate A1s, A2s, A3s, T1s, T2s, T3s, G1s, G2s, G3s, C1s, C2s, C3s.   
     
     Parameters
     ----------
     Obs: get_Obs function return value.
-    sym: {bool} only synonymous codons model,
-         if the value is True, amino acids without synonymous codons and stop codons are deleted.
-    """
+    base: {A, T, G, C} Four base types.
+    phase: {0, 1, 2} Codon phase, starting at 0.
     
-    ATGC1 = {}
-    ATGC2 = {}
-    ATGC3 = {}
-    for AA in Obs:
-        if sym:
-            if AA in ['*']:
+    Example
+    ----------
+    A3s = get_base_phase_synonymous(Obs, base=A, phase=2)
+    T3s = get_base_phase_synonymous(Obs, base=T, phase=2)
+    G3s = get_base_phase_synonymous(Obs, base=G, phase=2)
+    C3s = get_base_phase_synonymous(Obs, base=C, phase=2)
+    A1s = get_base_phase_synonymous(Obs, base=A, phase=0)
+    
+    Reference
+    ----------
+    [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
+    """
+    Xphases_Obs = {}
+    for aa in Obs:
+        for c in Obs[aa]:
+            if c[phase] == base:
+                Xphases_Obs.setdefault(aa, Obs[aa])
+    Xphases_codons = {}
+    for aa in Xphases_Obs:
+            if aa in ['*']:
                 continue
-            if len(Obs[AA]) < 2:
+            if len(Xphases_Obs[aa]) < 2:
                 continue
-        for Codon in Obs[AA]:
-            if Codon[0] not in ATGC1:
-                ATGC1.setdefault(Codon[0], Obs[AA][Codon])
-            else:
-                ATGC1[Codon[0]] += Obs[AA][Codon]
-            if Codon[1] not in ATGC2:
-                ATGC2.setdefault(Codon[1], Obs[AA][Codon])
-            else:
-                ATGC2[Codon[1]] += Obs[AA][Codon]
-            if Codon[2] not in ATGC3:
-                ATGC3.setdefault(Codon[2], Obs[AA][Codon])
-            else:
-                ATGC3[Codon[2]] += Obs[AA][Codon]
-    if sum(ATGC1.values()) !=0:
-        GC1= ATGC1.get('G', 0)/sum(ATGC1.values()) + ATGC1.get('C', 0)/sum(ATGC1.values())
-    else:
-        GC1 = None
-    if sum(ATGC2.values()):
-        GC2= ATGC2.get('G', 0)/sum(ATGC2.values()) + ATGC2.get('C', 0)/sum(ATGC2.values())     
-    else:
-        GC2 = None
-    if sum(ATGC3.values()):
-        GC3= ATGC3.get('G', 0)/sum(ATGC3.values()) + ATGC3.get('C', 0)/sum(ATGC3.values())
-    else:
-        GC3 = None
-    if GC1 !=None and GC2 !=None:
-        GC12 = (GC1 + GC2)/2
-    else:
-        GC12 = None
-    return {"GC1":GC1, "GC2":GC2, "GC12":GC12, "GC3":GC3}
+            for c in Obs[aa]:
+                if c[phase] not in Xphases_codons:
+                    Xphases_codons.setdefault(c[phase], Obs[aa][c])
+                else:
+                    Xphases_codons[c[phase]] += Obs[aa][c]
+    return Xphases_codons.get(base, 0)/sum(Xphases_codons.values())    
 
-def get_NC(Obs):
+def get_ENC(Obs):
     """
     Description
     ----------
@@ -1246,8 +1506,8 @@ def get_PR2(Obs):
         GC3_bias_four_codon = None
     return {"A3/(A3+T3)|4": AT3_bias_four_codon, "G3/(G3+C3)|4": GC3_bias_four_codon}
 
-class NPA_analysis():
-    def __init__(self, inputfile, genetic_code, sym=True):
+class NPA_Analysis():
+    def __init__(self, file, genetic_code, sym=True):
         """
         Description
         ----------
@@ -1255,7 +1515,7 @@ class NPA_analysis():
         
         Parameters
         ----------
-        inputfile: a fasta or fasta.gz format file include of CDS seqence.
+        file: a fasta or fasta.gz format file include of CDS seqence.
         genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
         sym: {bool} only synonymous codons model,
              if the value is True, amino acids without synonymous codons and stop codons are deleted.
@@ -1266,16 +1526,23 @@ class NPA_analysis():
         GC3 = []
         GC12 = []
         GeneName = []
-        for ID, Seq in FastaIO(inputfile):
+        for ID, Seq in FastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
-            res = get_GC123(Obs, sym)
-            if res["GC1"] !=None and res["GC2"] !=None and res["GC12"] !=None and res["GC3"] !=None:
-                GC1.append(res["GC1"])
-                GC2.append(res["GC2"])
-                GC3.append(res["GC3"])
-                GC12.append(res["GC12"])
-                GeneName.append(ID)
-        
+            res = get_ATGC_Indices(Obs)
+            if sym == True:
+                if res["GC1s"] !=None and res["GC2s"] !=None and res["GC12s"] !=None and res["GC3s"] !=None:
+                    GC1.append(res["GC1s"])
+                    GC2.append(res["GC2s"])
+                    GC3.append(res["GC3s"])
+                    GC12.append(res["GC12s"])
+            else:
+                if res["GC1"] !=None and res["GC2"] !=None and res["GC12"] !=None and res["GC3"] !=None:
+                    GC1.append(res["GC1"])
+                    GC2.append(res["GC2"])
+                    GC3.append(res["GC3"])
+                    GC12.append(res["GC12"])
+            GeneName.append(ID)
+                
         PearsonRResult = ss.pearsonr(GC3, GC12)
         R = PearsonRResult[0]
         P = PearsonRResult[1]
@@ -1298,25 +1565,31 @@ class NPA_analysis():
     def __repr__(self):
         return self.__str__()
     
-    def get_df(self):
-        return pd.DataFrame({"Gene Name":self.GeneName,
-                             "GC3": self.GC3,
-                             "GC12": self.GC12, 
-                             "GC1": self.GC1,
-                             "GC2": self.GC2})
-    
+    def get_df(self, outfile=None):
+        if self.sym:
+            df = pd.DataFrame({"Gene Name":self.GeneName, "GC3s": self.GC3, "GC12s": self.GC12, "GC1s": self.GC1, "GC2s": self.GC2})
+        else:
+            df = pd.DataFrame({"Gene Name":self.GeneName, "GC3": self.GC3, "GC12": self.GC12, "GC1": self.GC1, "GC2": self.GC2})
+        
+        if outfile != None:
+            df.to_csv(outfile, index=None, sep='\t')
+        else:
+            return df
+        
     def draw_NPA_plot(self, 
                       show_gene_names=False,
-                      figsize = (6,4),
+                      figsize=(6,4),
                       gene_names_size=10,
                       gene_names_color="#0A0A0A",
                       point_color="#4F845C",
                       line_color="#C25759", 
-                      point_size = 20,
+                      point_size=20,
                       title=None,
                       xlabel=None,
                       ylabel=None, 
-                      ax = None):
+                      ax=None,
+                      outfile=None,
+                     ):
         """
         Description
         ----------
@@ -1324,7 +1597,6 @@ class NPA_analysis():
 
         Parameters
         ----------
-        NPAResult: NPA function return value.
         show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
         gene_names_size: font size of gene name. 
         gene_names_color: font color of gene name. 
@@ -1335,6 +1607,7 @@ class NPA_analysis():
         xlabel: xlabel of plot.
         ylabel: ylabel of plot.
         ax: {None, Aexs}
+        outfile: A path of outfile.
         """
         xs = self.GC3
         ys = self.GC12
@@ -1379,10 +1652,14 @@ class NPA_analysis():
         ax.set_ylabel(ylabel)
         ax.set_title(title)
         ax.plot(xs, xs, c=line_color)
+        #ax.set_xlim((0, max(*ax.get_xlim(), *ax.get_ylim())))
+        #ax.set_ylim((0, max(*ax.get_xlim(), *ax.get_ylim())))
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
 
-class ENC_analysis():
-    def __init__(self, inputfile, genetic_code):
+class ENC_Analysis():
+    def __init__(self, file, genetic_code):
         """
         Description
         ----------
@@ -1390,21 +1667,21 @@ class ENC_analysis():
 
         Parameters
         ----------
-        inputfile: a fasta or fasta.gz format file include of CDS seqence.
+        file: a fasta or fasta.gz format file include of CDS seqence.
         genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
         """
         
         ys = []
         xs = []
         GeneName = []
-        for ID, Seq in FastaIO(inputfile):
+        for ID, Seq in FastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
-            xs.append(get_GC123(Obs, sym=True)["GC3"])
-            #xs.append(get_GC3s(Obs))
+            xs.append(get_ATGC_Indices(Obs)["GC3s"])
             try:
-                ys.append(get_NC(Obs))
+                ys.append(get_ENC(Obs))
             except:
-                print(ID)
+                pass
+                #print(ID)
             GeneName.append(ID)
             
         self.GC3s = xs
@@ -1417,8 +1694,12 @@ class ENC_analysis():
     def __repr__(self):
         return self.__str__()
     
-    def get_df(self):
-        return pd.DataFrame({"Gene Name":self.GeneName, "GC3s": self.GC3s, "ENC": self.ENC})
+    def get_df(self, outfile=None):
+        df = pd.DataFrame({"Gene Name":self.GeneName, "GC3s": self.GC3s, "ENC": self.ENC})
+        if outfile != None:
+            df.to_csv(outfile, sep='\t', index=None)
+        else:
+            return df 
         
     def draw_ENC_plot(self, 
                       figsize=(6,4),
@@ -1431,7 +1712,8 @@ class ENC_analysis():
                       title=None,
                       xlabel=None,
                       ylabel=None, 
-                      ax=None):
+                      ax=None, 
+                      outfile=None):
         """
         Description
         ----------
@@ -1439,7 +1721,6 @@ class ENC_analysis():
 
         Parameters
         ----------
-        ENCResult: ENC function return value.
         figsize: {(6,4)}
         show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
         gene_names_size: font size of gene name. 
@@ -1451,6 +1732,7 @@ class ENC_analysis():
         xlabel: xlabel of plot.
         ylabel: ylabel of plot.
         ax: {None, Aexs}
+        outfile: A path of outfile
         """
         def gc2enc(value):
             return 2 + value + 29/(pow(value, 2) + pow(1-value, 2))
@@ -1485,10 +1767,13 @@ class ENC_analysis():
                     if l in show_gene_names:
                         ax.text(x, y, l, c=gene_names_color, size=gene_names_size)
         ax.plot(np.arange(0, 1, 0.005), gc2enc(np.arange(0, 1, 0.005)), c=line_color)
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
 
-class PR2_analysis():
-    def __init__(self, inputfile, genetic_code):
+class PR2_Analysis():
+    def __init__(self, file, genetic_code):
         """
         Description
         ----------
@@ -1496,7 +1781,7 @@ class PR2_analysis():
         
         Parameters
         ----------
-        inputfile: a fasta or fasta.gz format file.
+        file: a fasta or fasta.gz format file.
         genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
 
         Reference
@@ -1506,11 +1791,11 @@ class PR2_analysis():
         [2] Sueoka N. Translation-coupled violation of Parity Rule 2 in human genes is not the cause of heterogeneity of
             the DNA G+C content of third codon position. Gene. 1999 Sep 30;238(1):53-8. doi: 10.1016/s0378-1119(99)00320-0. PMID: 10570983.
         """
-
+        
         ys = []
         xs = []
         GeneName = []
-        for ID, Seq in FastaIO(inputfile):
+        for ID, Seq in FastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
             res = get_PR2(Obs)
             ys.append(res["A3/(A3+T3)|4"])
@@ -1527,8 +1812,12 @@ class PR2_analysis():
     def __repr__(self):
         return self.__str__()
     
-    def get_df(self):
-        return pd.DataFrame({"Gene Name":self.GeneName, "A3/(A3+T3)|4": self.X_axis, "G3/(G3+C3)|4": self.Y_axis})
+    def get_df(self, outfile=None):
+        df = pd.DataFrame({"Gene Name":self.GeneName, "A3/(A3+T3)|4": self.X_axis, "G3/(G3+C3)|4": self.Y_axis})
+        if outfile != None:
+            df.to_csv(outfile, sep='\t', index=None)
+        else:
+            return df 
     
     def draw_PR2_plot(self, 
                       show_gene_names=False,
@@ -1541,7 +1830,9 @@ class PR2_analysis():
                       title=None,
                       xlabel=None,
                       ylabel=None, 
-                      ax = None):
+                      ax = None,
+                      outfile=None,
+                     ):
         """
         Description
         ----------
@@ -1549,7 +1840,6 @@ class PR2_analysis():
 
         Parameters
         ----------
-        PR2Result: PR2 function return value.
         figsize: (6,4)
         show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
         gene_names_size: font size of gene name. 
@@ -1561,6 +1851,7 @@ class PR2_analysis():
         xlabel: xlabel of plot.
         ylabel: ylabel of plot.
         ax: {None, Aexs}
+        outfile: A path of outfile.
         """
         ys = self.X_axis
         xs = self.Y_axis
@@ -1592,61 +1883,51 @@ class PR2_analysis():
                 else:
                     if l in show_gene_names:
                         ax.text(x, y, l, c=gene_names_color, size=gene_names_size)
+                        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
 
-class RSCU_analysis():
-    def __init__(self, data, genetic_code):
+class RSCU_Single_Species_Analysis():
+    def __init__(self, file, genetic_code):
         """
         Description
         ----------
-        RSCU analysis.
+        Analysis of the RSCU of each gene in a single species.
         
         Parameters
         ----------
-        data: [("species name", "cds file path"), ...]
+        file: A fasta or fasta.gz format file path.
         genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
         """
         
-        single_codon_amino_acids = set()
-        series_list = []
-        RSCUs_dict = {}
+        df_list = []
+        for name, seq in FastaIO(file):
+            RSCU = get_RSCU(get_Obs(seq, genetic_code=genetic_code))
+            df_list.append(pd.DataFrame({name:{(aa,c):RSCU.RSCU_dict[aa][c] for aa in RSCU.RSCU_dict for c in RSCU.RSCU_dict[aa]}}))
+        df = pd.concat(df_list, axis=1)
         
-        for prefix, file in data:
-            RSCU_Class = get_RSCU(get_Obs(file, genetic_code=genetic_code))
-            RSCUs_dict.setdefault(prefix, RSCU_Class)
-            RSCU = RSCU_Class.RSCU_dict
-            del RSCU["*"]
-            aas = []
-            codons = []
-            values = []
-            for aa in RSCU:
-                if len(RSCU[aa])==1:
-                    single_codon_amino_acids.add(aa)
-                for codon in RSCU[aa]:
-                    aas.append(aa)
-                    codons.append(codon)
-                    values.append(RSCU[aa][codon])
-            index = [aas, codons]
-            series = pd.Series(values, index=index)
-            series.name = prefix
-            series.index.names = ("Amino Acid", "Codon")
-            series_list.append(series)
-        RSCU_df = pd.DataFrame(series_list).T
-        RSCU_df = RSCU_df.sort_index()
-        self.RSCU_raw_df = RSCU_df
-        RSCU_df = RSCU_df.drop(list(single_codon_amino_acids), axis=0)
-        
-        self.RSCU_df = RSCU_df
-        self.single_codon_amino_acids = tuple(single_codon_amino_acids)
-        
-        df = self.RSCU_df.replace(0, pd.NA)
-        df = df.dropna()
+        tmp = {}
+        for aa, c in df.index:
+            if aa in tmp:
+                tmp[aa].append(c)
+            else:
+                tmp.setdefault(aa, [c])
+        single_codon_amino_acids = []
+        for i in tmp:
+            if len(tmp[i]) == 1:
+                single_codon_amino_acids.append(i)
+        self.single_codon_amino_acids = single_codon_amino_acids
         df = df.astype("float64")
-        ca = prince.CA(n_components=2)
-        self.ca = ca.fit(df)
-        pca = prince.PCA(n_components=2)
-        self.pca = pca.fit(df)
-        self.RSCUs_dict = RSCUs_dict
+        df.index.names = ("Amino Acid", "Codon")
+        self.RSCU_raw_df = df
+        df = df.drop(single_codon_amino_acids + ['*'], axis=0)
+        df = df.replace(0, 0.0000001)
+        self.RSCU_df = df
+        ca = prince.CA(n_components=4)
+        self.ca = ca.fit(self.RSCU_df)
+        pca = prince.PCA(n_components=4)
+        self.pca = pca.fit(self.RSCU_df)
         self.AAColorShapeType={"Gly": ("#4DBBD5FF", "o", "Nonpolar"),
                                "Ala": ("#4DBBD5FF", "v", "Nonpolar"),
                                "Val": ("#4DBBD5FF", "^", "Nonpolar"),
@@ -1668,70 +1949,101 @@ class RSCU_analysis():
                                "Arg": ("#91D1C2FF", "s", "Basic"), 
                                "His": ("#91D1C2FF", "p", "Basic")}
         
-    def get_PCA_df(self):
-        PCA_df = self.pca.column_correlations
-        PCA_df.columns = [f"PCA1 ({self.pca.eigenvalues_summary.iloc[0, 1]})",
-                          f"PCA2 ({self.pca.eigenvalues_summary.iloc[1, 1]})"]
-        PCA_df.index.name = "Species"
-        return PCA_df
+    def get_PCA_df(self, outfile=None):
+        """
+        Description
+        ----------
+        Return a dataframe of PCA.
         
-    def get_COA_df(self):
+        Parameters
+        ----------
+        outfile: A path of outfile.
+        """
+        PCA_df = self.pca.column_correlations
+        PCA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")"]
+        PCA_df.index.name = "Genes"
+        
+        if outfile != None:
+            PCA_df.to_csv(outfile, sep='\t')
+        else:
+            return PCA_df
+        
+    def get_COA_df(self, outfile=None):
+        """
+        Description
+        ----------
+        Return a dataframe of COA.
+        
+        Parameters
+        ----------
+        outfile: A path of outfile.
+        """
+        
         ca_column = self.ca.column_coordinates(self.RSCU_df)
-        ca_column["Type"] = "Species"
+        ca_column["Type"] = "Genes"
         ca_row = self.ca.row_coordinates(self.RSCU_df)
-        ca_row["Type"] = "Codon"
+        ca_row["Type"] = "Codons"
         COA_df = pd.concat([ca_column, ca_row])
-        COA_df.columns = [f"COA1 ({self.ca.eigenvalues_summary.iloc[0, 1]})",
-                          f"COA2 ({self.ca.eigenvalues_summary.iloc[1, 1]})",
-                          "Type"]
-        return COA_df
-    
+        COA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")",
+                          "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")",
+                          "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")",
+                          "Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")", "Type"]
+        if outfile != None:
+            COA_df.to_csv(outfile, sep='\t', index=None)
+        else:
+            return COA_df
+        
     def draw_COA_plot(self, 
                       figsize=(8,8), 
-                      species_labels_color="black",
-                      species_labels_style="italic",
-                      species_labels_size = 8,
-                      species_shapes_color = None,
-                      species_shapes_size = 200,
-                      species_labels_ha = "left",
-                      species_labels_va = "bottom",
+                      gene_labels_color="black",
+                      gene_labels_style="normal",
+                      gene_labels_size = 8,
+                      gene_shapes_color = None,
+                      gene_shapes_size = 200,
+                      gene_labels_ha = "left",
+                      gene_labels_va = "bottom",
                       codon_labels_color = "black",
                       codon_labels_size = 8,
                       codon_shapes_size = 100,
                       codon_labels_ha = "left",
                       codon_labels_va = "bottom",
-                      show_species_labels = True,
+                      show_gene_labels = True,
                       show_codon_labels = True,
+                      show_codon = True,
+                      show_gene = True,
                       title = None,
                       xlabel = None,
                       ylabel = None,
                       title_size = 12,
                       xlabel_size = 12,
                       ylabel_size = 12,
-                      ax=None):
+                      ax=None, 
+                      outfile=None):
         """  
         Description 
         -----------
         
         Draw correspondence analysis of RSCU plot.
-
+        
         Parameters
         ----------
         figsize: (8,8)
-        species_labels_color: "black"
-        species_labels_style: "italic"
-        species_labels_size: 8,
-        species_shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        species_shapes_size: 200,
-        species_labels_ha: {"left", "right", "top", "bottom", "center"}
-        species_labels_va: {"left", "right", "top", "bottom", "center"}
+        gene_labels_color: "black"
+        gene_labels_style: {'normal', 'italic', 'oblique'}
+        gene_labels_size: 8,
+        gene_shapes_color: {None, {"gene1": "red", "gene2":"blue", ... }}
+        gene_shapes_size: 200,
+        gene_labels_ha: {"left", "right", "top", "bottom", "center"}
+        gene_labels_va: {"left", "right", "top", "bottom", "center"}
         codon_labels_color: "black",
         codon_labels_size: 8,
         codon_shapes_size: 100,
         codon_labels_ha: {"left", "right", "top", "bottom", "center"}
         codon_labels_va: {"left", "right", "top", "bottom", "center"}
-        show_species_labels: {bool, ["species1", "species2", ...]} show species name in plot.
-        show_codon_labels: {bool, ["codon1", "codon2", ...]} show codon in plot.
+        show_gene_labels: {bool, ["gene1", "gene2", ...]} show gene labels in plot.
+        show_gene: {bool} show gene in plot.
+        show_codon_labels: {bool, ["codon1", "codon2", ...]} show codon labels in plot.
+        show_codon: {bool} show codon in plot.
         title {None, str}
         xlabel {None, str}
         ylabel {None, str}
@@ -1739,94 +2051,96 @@ class RSCU_analysis():
         xlabel_size: 12
         ylabel_size: 12
         ax: {None, Aexs}
+        outfile: A path of outfile.
         """
         
-        df = self.RSCU_df.replace(0, pd.NA)
-        df = df.dropna()
-        df = df.astype("float64")
-        row_coords = self.ca.row_coordinates(df)
-        col_coords = self.ca.column_coordinates(df)
+        row_coords = self.ca.row_coordinates(self.RSCU_df)
+        col_coords = self.ca.column_coordinates(self.RSCU_df)
         
         # Plotting the results
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
             
         # Adding labels
-        if show_codon_labels !=None and show_codon_labels !=False:
-            if isinstance(show_codon_labels, list):
-                for i, index in enumerate(df.index):
-                    aa = index[0]
-                    codon = index[1]
-                    if codon in show_codon_labels:
+        if show_codon:
+            if show_codon_labels !=None and show_codon_labels !=False:
+                if isinstance(show_codon_labels, list):
+                    for i, index in enumerate(self.RSCU_df.index):
+                        aa = index[0]
+                        codon = index[1]
+                        if codon in show_codon_labels:
+                            ax.annotate(codon,
+                                        (row_coords[0][i], row_coords[1][i]), 
+                                        color=codon_labels_color,
+                                        fontsize=codon_labels_size,
+                                        ha=codon_labels_ha,
+                                        va=codon_labels_va)
+                else:
+                    for i, index in enumerate(self.RSCU_df.index):
+                        aa = index[0]
+                        codon = index[1]
                         ax.annotate(codon,
-                                    (row_coords[0][i], row_coords[1][i]), 
+                                    (row_coords[0][i], row_coords[1][i]),
                                     color=codon_labels_color,
                                     fontsize=codon_labels_size,
                                     ha=codon_labels_ha,
                                     va=codon_labels_va)
-            else:
-                for i, index in enumerate(df.index):
-                    aa = index[0]
-                    codon = index[1]
-                    ax.annotate(codon,
-                                (row_coords[0][i], row_coords[1][i]),
-                                color=codon_labels_color,
-                                fontsize=codon_labels_size,
-                                ha=codon_labels_ha,
-                                va=codon_labels_va)
-        
-        if show_species_labels != None and show_species_labels != False:
-            if isinstance(show_species_labels, list):
-                for i, spceies in enumerate(df.columns):
-                    if spceies in show_species_labels:
-                        ax.annotate(spceies, 
+        if show_gene:
+            if show_gene_labels != None and show_gene_labels != False:
+                if isinstance(show_gene_labels, list):
+                    for i, gene in enumerate(self.RSCU_df.columns):
+                        if gene in show_gene_labels:
+                            ax.annotate(gene, 
+                                        (col_coords[0][i], col_coords[1][i]),
+                                        color=gene_labels_color, 
+                                        fontsize=gene_labels_size,
+                                        style = gene_labels_style,
+                                        ha = gene_labels_ha,
+                                        va = gene_labels_va)
+                else:
+                    for i, gene in enumerate(self.RSCU_df.columns):
+                        ax.annotate(gene,
                                     (col_coords[0][i], col_coords[1][i]),
-                                    color=species_labels_color, 
-                                    fontsize=species_labels_size,
-                                    style = species_labels_style,
-                                    ha = species_labels_ha,
-                                    va = species_labels_va)
-            else:
-                for i, spceies in enumerate(df.columns):
-                    ax.annotate(spceies,
-                                (col_coords[0][i], col_coords[1][i]),
-                                color=species_labels_color,
-                                fontsize=species_labels_size,
-                                style = species_labels_style,
-                                ha = species_labels_ha,
-                                va = species_labels_va)
+                                    color=gene_labels_color,
+                                    fontsize=gene_labels_size,
+                                    style = gene_labels_style,
+                                    ha = gene_labels_ha,
+                                    va = gene_labels_va)
                     
         # Adding points
-        Pa_dict = {}
-        for i in range(0,len(row_coords)):
-            aa = row_coords.index[i][0]
-            codon = row_coords.index[i][1]
-            Pa = ax.scatter(row_coords[0][i], row_coords[1][i], 
-                            c=self.AAColorShapeType[aa][0],
-                            label=aa, 
-                            marker=self.AAColorShapeType[aa][1],
-                            s=codon_shapes_size)
-            Pa_dict[aa] = Pa
-            
-        Pa_list = [Pa_dict[k] for k in list(self.AAColorShapeType.keys()) if k in Pa_dict]
+        Pa_list = []
+        if show_codon:
+            Pa_dict = {}
+            for i in range(0,len(row_coords)):
+                aa = row_coords.index[i][0]
+                codon = row_coords.index[i][1]
+                Pa = ax.scatter(row_coords[0][i], row_coords[1][i], 
+                                c=self.AAColorShapeType[aa][0],
+                                label=aa, 
+                                marker=self.AAColorShapeType[aa][1],
+                                s=codon_shapes_size)
+                Pa_dict[aa] = Pa
+                
+            Pa_list = [Pa_dict[k] for k in list(self.AAColorShapeType.keys()) if k in Pa_dict]
         
         Ps_list = []
-        for i in range(0, len(col_coords)):
-            if isinstance(species_shapes_color, dict):
-                Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
-                                c=species_shapes_color.get(col_coords.index[i],"#E64B35FF"), 
-                                label=col_coords.index[i],
-                                marker="*", 
-                                s=species_shapes_size)
-                Ps_list.append(Ps)
-            else:
-                Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
-                                c='#E64B35FF', 
-                                label='Species', 
-                                marker="*",
-                                s=species_shapes_size)
-                if i == 0:
+        if show_gene:
+            for i in range(0, len(col_coords)):
+                if isinstance(gene_shapes_color, dict):
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                    c=gene_shapes_color.get(col_coords.index[i],"#E64B35FF"), 
+                                    label=col_coords.index[i],
+                                    marker="*", 
+                                    s=gene_shapes_size)
                     Ps_list.append(Ps)
+                else:
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                    c='#E64B35FF', 
+                                    label='Genes', 
+                                    marker="*",
+                                    s=gene_shapes_size)
+                    if i == 0:
+                        Ps_list.append(Ps)
                     
         # Adding legend
         ax.legend(handles=[*tuple(Pa_list), *tuple(Ps_list)],
@@ -1835,8 +2149,8 @@ class RSCU_analysis():
                   ncol=1,
                   frameon=False,
                   shadow=False,
-                  title='',
-        )
+                  title=''
+                 )
         
         if title == None:
             title = 'Correspondence analysis of RSCU'
@@ -1847,12 +2161,15 @@ class RSCU_analysis():
         ax.set_title(title, size=title_size)
         ax.set_xlabel(xlabel, size=xlabel_size)
         ax.set_ylabel(ylabel, size=ylabel_size)
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def draw_PCA_plot(self,
                       figsize=(6,6), 
                       labels_color="black", 
-                      labels_style="italic", 
+                      labels_style="normal", 
                       labels_size = 8, 
                       shapes_color = '#E64B35FF', 
                       labels_ha = "left", 
@@ -1867,7 +2184,8 @@ class RSCU_analysis():
                       title_size = 12,
                       xlabel_size = 12,
                       ylabel_size = 12,
-                      ax=None):
+                      ax=None, 
+                      outfile=None):
         """
         Description 
         -----------
@@ -1894,6 +2212,734 @@ class RSCU_analysis():
         xlabel_size: 12
         ylabel_size: 12
         ax: {None, Aexs}
+        outfile: A path of outfile.
+         """
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        
+        for z, i in zip(self.get_shape_and_color(self.pca.column_correlations.shape[0]), range(self.pca.column_correlations.shape[0])):
+            x = self.pca.column_correlations[0][i]
+            y = self.pca.column_correlations[1][i]
+            label = self.pca.column_correlations.index[i]
+            shape_type=z[0]
+            shape_color=z[1]
+            
+            if shapes_type !=None:
+                if isinstance(shapes_type, dict):
+                    shape_type = shapes_type.get(label, z[0])
+                else:
+                    shape_type = shapes_type
+                    
+            if shapes_color !=None:
+                if isinstance(shapes_color, dict):
+                    shape_color = shapes_color.get(label, z[1])
+                else:
+                    shape_color = shapes_color
+
+            ax.scatter(x,y, label=label, 
+                       marker=shape_type, 
+                       color=shape_color,
+                       s=shapes_size)
+            
+            if isinstance(show_labels, list):
+                if label in show_labels:
+                    ax.annotate(label, (x,y), 
+                                color=labels_color,
+                                fontsize=labels_size,
+                                style = labels_style,
+                                ha = labels_ha,
+                                va = labels_va)
+            else:
+                if show_labels:
+                    ax.annotate(label, (x,y), 
+                                color=labels_color,
+                                fontsize=labels_size,
+                                style = labels_style,
+                                ha = labels_ha,
+                                va = labels_va)
+
+        if title == None:
+            title = f'Principal component analysis of RSCU'
+        if xlabel == None:
+            xlabel = f"Dim 1 ({self.pca.eigenvalues_summary.iloc[0,1]})"
+        if ylabel == None:
+            ylabel = f"Dim 2 ({self.pca.eigenvalues_summary.iloc[1,1]})"
+            
+        ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+
+        if show_legend == True:
+            ax.legend(loc='center left',  
+                      bbox_to_anchor=(1, 0.5),
+                      ncol=1,
+                      frameon=False,
+                      shadow=False,
+                      title='')
+            
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def get_shape_and_color(self, length):
+        shapes = ["o", "s", "^", "<", ">", "v", "p", "P", "*", "h", "H", "+", "x", "X", "D", "d", "8"]
+        colors = ["#1F77B4FF", "#FF7F0EFF", "#2CA02CFF", "#D62728FF", "#9467BDFF", "#8C564BFF", "#E377C2FF", "#7F7F7FFF", "#BCBD22FF", "#17BECFFF"]
+        n = len(shapes) * len(colors)
+        l = []
+        for x in shapes:
+            for y in colors:
+                l.append((x, y))
+        res = []
+        for i in range(0, length):
+            res.append(l[i%n])
+        return res
+    
+    def draw_heatmap(self, 
+                     figsize=None, 
+                     cmap="Blues",
+                     ax=None,
+                     ylabels_fontstyle='normal',
+                     xlabels_fontstyle='normal',
+                     ylabels_fontsize=10,
+                     xlabels_fontsize=10,
+                     show_ylabels=True,
+                     show_xlabels=True,
+                     outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw heatmap of RSCU.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        cmap : matplotlib colormap name or object, or list of colors, optional
+               The mapping from data values to color space. If not provided, the
+               default will depend on whether ``center`` is set.
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
+        ylabels_fontsize: 10
+        xlabels_fontsize: 10
+        show_ylabels: {bool}
+        show_xlabels: {bool}
+        outfile: A path of outfile.
+        """
+        if figsize == None:
+            figsize = (14, self.RSCU_df.shape[1]/2)
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(self.RSCU_df.T, cmap=cmap, ax=ax, 
+                    yticklabels=show_ylabels,
+                    xticklabels=show_xlabels)
+        ax.set_yticklabels(ax.get_yticklabels(),fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
+        ax.set_xticklabels(ax.get_xticklabels(),fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
+        ax.set_xlabel("")
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_clustermap(self, 
+                        figsize=None, 
+                        cmap="Blues",
+                        ylabels_fontstyle='normal',
+                        xlabels_fontstyle='normal',
+                        ylabels_fontsize=10,
+                        xlabels_fontsize=10,
+                        row_cluster=True,
+                        col_cluster=True,
+                        show_ylabels=True,
+                        show_xlabels=True,
+                        outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw clustermap of RSCU.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        cmap : matplotlib colormap name or object, or list of colors, optional
+               The mapping from data values to color space. If not provided, the
+               default will depend on whether ``center`` is set.
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
+        ylabels_fontsize: 10
+        xlabels_fontsize: 10
+        show_ylabels: {bool}
+        show_xlabels: {bool}
+        """
+        if figsize == None:
+            figsize = (14, self.RSCU_df.shape[1]/2)
+        
+        cmp = sns.clustermap(self.RSCU_df.T,
+                             figsize=figsize, 
+                             cmap=cmap,
+                             row_cluster = row_cluster,
+                             col_cluster = col_cluster,
+                             yticklabels = show_ylabels,
+                             xticklabels = show_xlabels
+                            )
+        cmp.ax_heatmap.set_yticklabels(cmp.ax_heatmap.get_yticklabels(), fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
+        cmp.ax_heatmap.set_xticklabels(cmp.ax_heatmap.get_xticklabels(), fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
+        cmp.ax_heatmap.set_xlabel("")
+        
+        if outfile != None:
+            cmp.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_boxplot(self,
+                     figsize=None,
+                     ax=None,
+                     fontstyle='normal',
+                     fontsize=10, 
+                     outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw boxplot of RSCU.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        fontstyle: {'normal', 'italic', 'oblique'}
+        fontsize: 10
+        outfile: A path of outfile.
+        """
+        if figsize == None:
+            figsize = (4, self.RSCU_df.shape[1]/4)
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        sns.boxplot(self.RSCU_df, orient='h', ax=ax)
+        ax.set_yticks(ax.get_yticks())
+        ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
+        ax.set_xlabel("RSCU")
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_pearson_heatmap(self,
+                             figsize=None, 
+                             cmap="Blues",
+                             labels_fontstyle='normal',
+                             labels_fontsize=10,
+                             ax=None, 
+                             outfile=None):
+        """
+        Description 
+        -----------
+        Draw pearson heatmap of RSCU.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        cmap : matplotlib colormap name or object, or list of colors, optional
+               The mapping from data values to color space. If not provided, the
+               default will depend on whether ``center`` is set.
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        labels_fontstyle: {'normal', 'italic', 'oblique'}
+        labels_fontsize: 10
+        outfile: A path of outfile.
+        """
+        if figsize == None:
+            figsize = (self.RSCU_df.shape[1]/4+1, self.RSCU_df.shape[1]/4)
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        corr = self.RSCU_df.corr(method='pearson')
+        mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
+        sns.heatmap(corr, mask=mask, fmt=".2f", cmap="Blues", ax=ax)
+        ax.set_xticklabels(ax.get_xticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        ax.set_yticklabels(ax.get_yticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_RSCU_barplot(self, outfile=None):
+        """
+        Description 
+        -----------
+        Draw RSCU barplot.
+        
+        Parameters
+        ----------
+        outfile: A path of outfile.
+        """
+        fig, axs = plt.subplots(len(self.RSCUs_dict),
+                                figsize=(8, len(self.RSCUs_dict)*4))
+        fig.subplots_adjust(hspace=0.8)
+        for prefix, ax in zip(self.RSCUs_dict, axs):
+            self.RSCUs_dict[prefix].draw_barplot(title=prefix, codon_space=0.25, ax=ax)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def get_tree(self, metric='euclidean', outgroup="midpoint", tree_method="nj"):
+        """
+        Description 
+        -----------
+        Return a tree object from TreeNode class of scikit-bio. 
+        
+        Parameters
+        ----------
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        dist = pdist(np.matrix(self.RSCU_df.T), metric=metric)
+        dist_matrix = DistanceMatrix(squareform(dist), ids=list(self.RSCU_df.T.index))
+        if tree_method == 'nj':
+            tree = nj(dist_matrix)
+        elif tree_method == 'upgma':
+            tree = upgma(dist_matrix)
+        elif tree_method == "gme":
+            tree = gme(dist_matrix)
+        elif tree_method == 'bme':
+            tree = bme(dist_matrix)
+            
+        if outgroup == None:
+            pass
+        elif outgroup == "midpoint":
+            tree = tree.root_at_midpoint(inplace=False, reset=True)
+        else:
+            tree = tree.root_by_outgroup(outgroup)
+        return tree
+    
+    def get_tree_newick_string(self, metric='euclidean', outgroup="midpoint", tree_method="nj"):
+        """
+        Description 
+        -----------
+        Return a tree string of newick format. 
+        
+        Parameters
+        ----------
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        tree = self.get_tree(metric, outgroup, tree_method)
+        f = io.StringIO()
+        tree.write(f)
+        f.seek(0)
+        tree_str = f.read()
+        f.close()
+        return tree_str[:-1]
+    
+    def draw_tree_plot(self,
+                       figsize=(8,8), 
+                       ax=None,
+                       tree_method="nj",
+                       metric='euclidean',
+                       outgroup="midpoint",
+                       ignore_branch_length=True,
+                       ladderize=True,
+                       ladderize_by="size",
+                       ladderize_direction="right",
+                       leaf_label_size=10,
+                       linewidth=1.5,
+                       width=10,
+                       height=0.7, 
+                       outfile=None):
+        """
+        Description 
+        -----------
+        Draw tree plot of RSCU by NJ method.
+        
+        Parameters
+        ----------
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        figsize: tuple of (width, height), optional
+        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
+        ignore_branch_length : {bool} Ignore branch lengths for cladogram
+        innode_label_size : {float} Font size for internal node labels.
+        ladderize : {bool} Enable ladderize tree sorting.
+        ladderize_by : {size, branch_length} Sort criterion.
+        ladderize_direction : {left, right} Direction for larger subtrees.
+        leaf_label_size : {float} Font size for leaf labels.
+        linewidth : {float} Branch line width.
+        height : Figure height per leaf node.
+        width : Figure width.
+        outfile: A path of outfile.
+        """
+        tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method)
+        plotter = TreePlotter(tree, 
+                              ignore_branch_length=ignore_branch_length,
+                              ladderize=ladderize,
+                              ladderize_by=ladderize_by,
+                              ladderize_direction=ladderize_direction,
+                              leaf_label_size=leaf_label_size,
+                              linewidth=linewidth,
+                              width=width,
+                              height=height)
+        
+        #plotter.add_scale_bar(length=0.5, label="Scale", position=(0, 0))
+        plotter.plot(figsize=figsize, ax=ax, outfile=outfile)
+        return None
+    
+class RSCU_Multiple_Species_Analysis():
+    def __init__(self, data, genetic_code):
+        """
+        Description
+        ----------
+        RSCU analysis of multiple species.
+        
+        Parameters
+        ----------
+        data: [("species name", "cds file path"), ...]
+        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        """
+        
+        single_codon_amino_acids = set()
+        series_list = []
+        RSCUs_dict = {}
+        
+        for prefix, file in data:
+            RSCU = get_RSCU(get_Obs(file, genetic_code=genetic_code))
+            RSCUs_dict.setdefault(prefix, RSCU)
+            aas = []
+            codons = []
+            values = []
+            for aa in RSCU.RSCU_dict:
+                if len(RSCU.RSCU_dict[aa])==1:
+                    single_codon_amino_acids.add(aa)
+                for codon in RSCU.RSCU_dict[aa]:
+                    aas.append(aa)
+                    codons.append(codon)
+                    values.append(RSCU.RSCU_dict[aa][codon])
+            index = [aas, codons]
+            series = pd.Series(values, index=index)
+            series.name = prefix
+            series.index.names = ("Amino Acid", "Codon")
+            series_list.append(series)
+        self.single_codon_amino_acids = tuple(single_codon_amino_acids)
+        df = pd.DataFrame(series_list).T
+        df = df.sort_index()
+        self.RSCU_raw_df = df
+        df = df.drop(list(single_codon_amino_acids) + ["*"], axis=0)
+        df = df.astype("float64")
+        df = df.replace(0, 0.0000001)
+        self.RSCU_df = df
+        ca = prince.CA(n_components=4)
+        self.ca = ca.fit(df)
+        pca = prince.PCA(n_components=4)
+        self.pca = pca.fit(df)
+        self.RSCUs_dict = RSCUs_dict
+        self.AAColorShapeType={"Gly": ("#4DBBD5FF", "o", "Nonpolar"),
+                               "Ala": ("#4DBBD5FF", "v", "Nonpolar"),
+                               "Val": ("#4DBBD5FF", "^", "Nonpolar"),
+                               "Leu": ("#4DBBD5FF", "<", "Nonpolar"),
+                               "Ile": ("#4DBBD5FF", ">", "Nonpolar"),
+                               "Phe": ("#4DBBD5FF", "s", "Nonpolar"),
+                               "Pro": ("#4DBBD5FF", "p", "Nonpolar"),
+                               "Met": ("#4DBBD5FF", "d", "Nonpolar"),
+                               "Trp": ("#4DBBD5FF", "+", "Nonpolar"),
+                               "Ser": ("#F39B7FFF", "o", "Polar"), 
+                               "Thr": ("#F39B7FFF", "s", "Polar"), 
+                               "Cys": ("#F39B7FFF", "p", "Polar"), 
+                               "Asn": ("#F39B7FFF", "+", "Polar"), 
+                               "Gln": ("#F39B7FFF", "d", "Polar"), 
+                               "Tyr": ("#F39B7FFF", "^", "Polar"), 
+                               "Asp": ("#8491B4FF", "o", "Acidic"),
+                               "Glu": ("#8491B4FF", "s", "Acidic"),
+                               "Lys": ("#91D1C2FF", "o", "Basic"), 
+                               "Arg": ("#91D1C2FF", "s", "Basic"), 
+                               "His": ("#91D1C2FF", "p", "Basic")}
+        
+    def get_PCA_df(self, outfile=None):
+        """
+        Description
+        ----------
+        Return a dataframe of PCA.
+        
+        Parameters
+        ----------
+        outfile: A path of outfile.
+        """
+        PCA_df = self.pca.column_correlations
+        PCA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")"]
+        PCA_df.index.name = "Species"
+        
+        if outfile != None:
+            PCA_df.to_csv(outfile, sep='\t')
+        else:
+            return PCA_df
+        
+    def get_COA_df(self, outfile=None):
+        """
+        Description
+        ----------
+        Return a dataframe of COA.
+        
+        Parameters
+        ----------
+        outfile: A path of outfile.
+        """
+        
+        ca_column = self.ca.column_coordinates(self.RSCU_df)
+        ca_column["Type"] = "Species"
+        ca_row = self.ca.row_coordinates(self.RSCU_df)
+        ca_row["Type"] = "Codons"
+        COA_df = pd.concat([ca_column, ca_row])
+        COA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")",
+                          "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")",
+                          "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")",
+                          "Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")", "Type"]
+        if outfile != None:
+            COA_df.to_csv(outfile, sep='\t', index=None)
+        else:
+            return COA_df
+    
+    def draw_COA_plot(self, 
+                      figsize=(8,8), 
+                      species_labels_color="black",
+                      species_labels_style="italic",
+                      species_labels_size = 8,
+                      species_shapes_color = None,
+                      species_shapes_size = 200,
+                      species_labels_ha = "left",
+                      species_labels_va = "bottom",
+                      codon_labels_color = "black",
+                      codon_labels_size = 8,
+                      codon_shapes_size = 100,
+                      codon_labels_ha = "left",
+                      codon_labels_va = "bottom",
+                      show_species_labels = True,
+                      show_codon_labels = True,
+                      show_species=True,
+                      show_codon=True,
+                      title = None,
+                      xlabel = None,
+                      ylabel = None,
+                      title_size = 12,
+                      xlabel_size = 12,
+                      ylabel_size = 12,
+                      ax=None, 
+                      outfile=None):
+        """  
+        Description 
+        -----------
+        
+        Draw correspondence analysis of RSCU plot.
+        
+        Parameters
+        ----------
+        figsize: (8,8)
+        species_labels_color: "black"
+        species_labels_style: {'normal', 'italic', 'oblique'}
+        species_labels_size: 8,
+        species_shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
+        species_shapes_size: 200,
+        species_labels_ha: {"left", "right", "top", "bottom", "center"}
+        species_labels_va: {"left", "right", "top", "bottom", "center"}
+        codon_labels_color: "black",
+        codon_labels_size: 8,
+        codon_shapes_size: 100,
+        codon_labels_ha: {"left", "right", "top", "bottom", "center"}
+        codon_labels_va: {"left", "right", "top", "bottom", "center"}
+        show_species_labels: {bool, ["species1", "species2", ...]} show species labels in plot.
+        show_species: {bool} show species in plot.
+        show_codon_labels: {bool, ["codon1", "codon2", ...]} show codon labels in plot.
+        show_codon: {bool} show codon in plot.
+        title {None, str}
+        xlabel {None, str}
+        ylabel {None, str}
+        title_size: 12
+        xlabel_size: 12
+        ylabel_size: 12
+        ax: {None, Aexs}
+        outfile: A path of outfile.
+        """
+        
+        row_coords = self.ca.row_coordinates(self.RSCU_df)
+        col_coords = self.ca.column_coordinates(self.RSCU_df)
+        
+        # Plotting the results
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        # Adding labels
+        if show_codon:
+            if show_codon_labels !=None and show_codon_labels !=False:
+                if isinstance(show_codon_labels, list):
+                    for i, index in enumerate(self.RSCU_df.index):
+                        aa = index[0]
+                        codon = index[1]
+                        if codon in show_codon_labels:
+                            ax.annotate(codon,
+                                        (row_coords[0][i], row_coords[1][i]), 
+                                        color=codon_labels_color,
+                                        fontsize=codon_labels_size,
+                                        ha=codon_labels_ha,
+                                        va=codon_labels_va)
+                else:
+                    for i, index in enumerate(self.RSCU_df.index):
+                        aa = index[0]
+                        codon = index[1]
+                        ax.annotate(codon,
+                                    (row_coords[0][i], row_coords[1][i]),
+                                    color=codon_labels_color,
+                                    fontsize=codon_labels_size,
+                                    ha=codon_labels_ha,
+                                    va=codon_labels_va)
+        if show_species:
+            if show_species_labels != None and show_species_labels != False:
+                if isinstance(show_species_labels, list):
+                    for i, spceies in enumerate(self.RSCU_df.columns):
+                        if spceies in show_species_labels:
+                            ax.annotate(spceies, 
+                                        (col_coords[0][i], col_coords[1][i]),
+                                        color=species_labels_color, 
+                                        fontsize=species_labels_size,
+                                        style = species_labels_style,
+                                        ha = species_labels_ha,
+                                        va = species_labels_va)
+                else:
+                    for i, spceies in enumerate(self.RSCU_df.columns):
+                        ax.annotate(spceies,
+                                    (col_coords[0][i], col_coords[1][i]),
+                                    color=species_labels_color,
+                                    fontsize=species_labels_size,
+                                    style = species_labels_style,
+                                    ha = species_labels_ha,
+                                    va = species_labels_va)
+                    
+        # Adding points
+        Pa_list = []
+        if show_codon:
+            Pa_dict = {}
+            for i in range(0,len(row_coords)):
+                aa = row_coords.index[i][0]
+                codon = row_coords.index[i][1]
+                Pa = ax.scatter(row_coords[0][i], row_coords[1][i], 
+                                c=self.AAColorShapeType[aa][0],
+                                label=aa, 
+                                marker=self.AAColorShapeType[aa][1],
+                                s=codon_shapes_size)
+                Pa_dict[aa] = Pa
+            Pa_list = [Pa_dict[k] for k in list(self.AAColorShapeType.keys()) if k in Pa_dict]
+        
+        Ps_list = []
+        if show_species:
+            for i in range(0, len(col_coords)):
+                if isinstance(species_shapes_color, dict):
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                    c=species_shapes_color.get(col_coords.index[i],"#E64B35FF"), 
+                                    label=col_coords.index[i],
+                                    marker="*", 
+                                    s=species_shapes_size)
+                    Ps_list.append(Ps)
+                else:
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                    c='#E64B35FF', 
+                                    label='Species', 
+                                    marker="*",
+                                    s=species_shapes_size)
+                    if i == 0:
+                        Ps_list.append(Ps)
+                    
+        # Adding legend
+        ax.legend(handles=[*tuple(Pa_list), *tuple(Ps_list)],
+                  loc='upper left', 
+                  bbox_to_anchor=(1, 1), 
+                  ncol=1,
+                  frameon=False,
+                  shadow=False,
+                  title='',
+        )
+        
+        if title == None:
+            title = 'Correspondence analysis of RSCU'
+        if xlabel == None:
+            xlabel = f'Dim 1 ({self.ca.eigenvalues_summary.iloc[0,1]})'
+        if ylabel == None:
+            ylabel = f'Dim 2 ({self.ca.eigenvalues_summary.iloc[1,1]})'
+        ax.set_title(title, size=title_size)
+        ax.set_xlabel(xlabel, size=xlabel_size)
+        ax.set_ylabel(ylabel, size=ylabel_size)
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_PCA_plot(self,
+                      figsize=(6,6), 
+                      labels_color="black", 
+                      labels_style="italic", 
+                      labels_size = 8, 
+                      shapes_color = '#E64B35FF', 
+                      labels_ha = "left", 
+                      labels_va = "bottom",
+                      shapes_type = '*',
+                      shapes_size = 100, 
+                      show_labels = True,
+                      show_legend = False,
+                      title = None,
+                      xlabel = None,
+                      ylabel = None,
+                      title_size = 12,
+                      xlabel_size = 12,
+                      ylabel_size = 12,
+                      ax=None, 
+                      outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw Principal component analysis plot.
+
+        Parameters
+        ----------
+        figsize: (6,6)
+        labels_color: black
+        labels_style: {'normal', 'italic', 'oblique'}
+        labels_size: 8,
+        labels_ha: {"left", "right", "top", "bottom", "center"}
+        labels_va: {"left", "right", "top", "bottom", "center"}
+        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
+        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
+        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
+        shapes_size: 100,
+        show_legend: {bool}
+        title {None, str}
+        xlabel {None, str}
+        ylabel {None, str}
+        title_size: 12
+        xlabel_size: 12
+        ylabel_size: 12
+        ax: {None, Aexs}
+        outfile: A path of outfile.
          """
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
@@ -1957,6 +3003,9 @@ class RSCU_analysis():
                       frameon=False,
                       shadow=False,
                       title='')
+            
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def get_shape_and_color(self, length):
@@ -1981,8 +3030,8 @@ class RSCU_analysis():
                      ylabels_fontsize=10,
                      xlabels_fontsize=10,
                      show_ylabels=True,
-                     show_xlabels=True
-                    ):
+                     show_xlabels=True,
+                     outfile=None):
         """
         Description 
         -----------
@@ -2003,6 +3052,7 @@ class RSCU_analysis():
         xlabels_fontsize: 10
         show_ylabels: {bool}
         show_xlabels: {bool}
+        outfile: A path of outfile.
         """
         if figsize == None:
             figsize = (14, self.RSCU_df.shape[1]/2)
@@ -2014,6 +3064,8 @@ class RSCU_analysis():
         ax.set_yticklabels(ax.get_yticklabels(),fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
         ax.set_xticklabels(ax.get_xticklabels(),fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
         ax.set_xlabel("")
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def draw_clustermap(self, 
@@ -2026,7 +3078,8 @@ class RSCU_analysis():
                         row_cluster=True,
                         col_cluster=True,
                         show_ylabels=True,
-                        show_xlabels=True):
+                        show_xlabels=True,
+                        outfile=None):
         """
         Description 
         -----------
@@ -2062,13 +3115,17 @@ class RSCU_analysis():
         cmp.ax_heatmap.set_yticklabels(cmp.ax_heatmap.get_yticklabels(), fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
         cmp.ax_heatmap.set_xticklabels(cmp.ax_heatmap.get_xticklabels(), fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
         cmp.ax_heatmap.set_xlabel("")
+        
+        if outfile != None:
+            cmp.savefig(outfile, dpi=600)
         return None
     
     def draw_boxplot(self,
-                     figsize = None,
-                     ax = None,
-                     fontstyle = 'italic',
-                     fontsize = 10):
+                     figsize=None,
+                     ax=None,
+                     fontstyle='italic',
+                     fontsize=10, 
+                     outfile=None):
         """
         Description 
         -----------
@@ -2082,6 +3139,7 @@ class RSCU_analysis():
              Axes in which to draw the plot, otherwise use the currently-active Axes.
         fontstyle: {'normal', 'italic', 'oblique'}
         fontsize: 10
+        outfile: A path of outfile.
         """
         if figsize == None:
             figsize = (4, self.RSCU_df.shape[1]/4)
@@ -2092,6 +3150,9 @@ class RSCU_analysis():
         ax.set_yticks(ax.get_yticks())
         ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
         ax.set_xlabel("RSCU")
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def draw_pearson_heatmap(self,
@@ -2099,8 +3160,8 @@ class RSCU_analysis():
                              cmap="Blues",
                              labels_fontstyle='italic',
                              labels_fontsize=10,
-                             ax = None
-                            ):
+                             ax=None, 
+                             outfile=None):
         """
         Description 
         -----------
@@ -2116,6 +3177,7 @@ class RSCU_analysis():
              Axes in which to draw the plot, otherwise use the currently-active Axes.
         labels_fontstyle: {'normal', 'italic', 'oblique'}
         labels_fontsize: 10
+        outfile: A path of outfile.
         """
         if figsize == None:
             figsize = (self.RSCU_df.shape[1]/4+1, self.RSCU_df.shape[1]/4)
@@ -2127,17 +3189,31 @@ class RSCU_analysis():
         sns.heatmap(corr, mask=mask, fmt=".2f", cmap="Blues", ax=ax)
         ax.set_xticklabels(ax.get_xticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
         ax.set_yticklabels(ax.get_yticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
-    def draw_RSCU_barplot(self):
+    def draw_RSCU_barplot(self, outfile=None):
+        """
+        Description 
+        -----------
+        Draw RSCU barplot.
+        
+        Parameters
+        ----------
+        outfile: A path of outfile.
+        """
         fig, axs = plt.subplots(len(self.RSCUs_dict),
                                 figsize=(8, len(self.RSCUs_dict)*4))
         fig.subplots_adjust(hspace=0.8)
         for prefix, ax in zip(self.RSCUs_dict, axs):
             self.RSCUs_dict[prefix].draw_barplot(title=prefix, codon_space=0.25, ax=ax)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
-    def get_tree(self, metric='euclidean', outgroup="midpoint", tree_method="upgma"):
+    def get_tree(self, metric='euclidean', outgroup="midpoint", tree_method="nj"):
         """
         Description 
         -----------
@@ -2174,7 +3250,7 @@ class RSCU_analysis():
             tree = tree.root_by_outgroup(outgroup)
         return tree
     
-    def get_tree_newick_string(self, metric='euclidean', outgroup="midpoint", tree_method="upgma"):
+    def get_tree_newick_string(self, metric='euclidean', outgroup="midpoint", tree_method="nj"):
         """
         Description 
         -----------
@@ -2203,7 +3279,7 @@ class RSCU_analysis():
     def draw_tree_plot(self,
                        figsize=(8,8), 
                        ax=None,
-                       tree_method="upgma",
+                       tree_method="nj",
                        metric='euclidean',
                        outgroup="midpoint",
                        ignore_branch_length=True,
@@ -2213,7 +3289,8 @@ class RSCU_analysis():
                        leaf_label_size=10,
                        linewidth=1.5,
                        width=10,
-                       height=0.7):
+                       height=0.7,
+                       outfile=None):
         """
         Description 
         -----------
@@ -2231,16 +3308,17 @@ class RSCU_analysis():
         braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
         outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
         figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
-        ignore_branch_length : {bool} Ignore branch lengths for cladogram
-        innode_label_size : {float} Font size for internal node labels.
-        ladderize : {bool} Enable ladderize tree sorting.
-        ladderize_by : {size, branch_length} Sort criterion.
-        ladderize_direction : {left, right} Direction for larger subtrees.
-        leaf_label_size : {float} Font size for leaf labels.
-        linewidth : {float} Branch line width.
-        height : Figure height per leaf node.
-        width : Figure width.
+        ax: matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
+        ignore_branch_length: {bool} Ignore branch lengths for cladogram
+        innode_label_size: {float} Font size for internal node labels.
+        ladderize: {bool} Enable ladderize tree sorting.
+        ladderize_by: {size, branch_length} Sort criterion.
+        ladderize_direction: {left, right} Direction for larger subtrees.
+        leaf_label_size: {float} Font size for leaf labels.
+        linewidth: {float} Branch line width.
+        height: Figure height per leaf node.
+        width: Figure width.
+        outfile: A path of outfile.
         """
         tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method)
         plotter = TreePlotter(tree, 
@@ -2252,37 +3330,40 @@ class RSCU_analysis():
                               linewidth=linewidth,
                               width=width,
                               height=height)
-        plotter.plot(figsize=figsize, ax=ax)
+        #plotter.add_scale_bar(length=0.5, label="Scale", position=(0, 0))
+        plotter.plot(figsize=figsize, ax=ax, outfile=outfile)
         return None
 
-
-class AAComposition_analysis():
-    def __init__(self, data, genetic_code):
+class AA_Composition_Single_Species_Analysis():
+    def __init__(self, file, genetic_code):
         """
         Description
         ----------
-        Amino acid composition analysis.
+        Analysis of the amino acid composition of each gene in a single species.
         
         Parameters
         ----------
-        data: [("species name", "cds file path"), ...]
+        file: A fasta or fasta.gz format file path.
         genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
         """
+        
         Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
         
-        AA_count_dict = {}
-        for prefix, file in data:
-            AA_count = defaultdict(int)
-            for ID, Seq in FastaIO(file):
-                for i in translate(Seq, genetic_code=genetic_code):
-                    AA_count[i] = AA_count[i] + 1
-                    
-            AA_count_dict.setdefault(prefix, {Seq1toSeq3[AA]:AA_count[AA] for AA in AA_count if AA in Seq1toSeq3})
-        
-        self.AA_count_df = pd.DataFrame(AA_count_dict)
+        AA_count_list = []
+        for ID, Seq in FastaIO(file):
+            AA_count = {'Gly':0, 'Ala':0, 'Val':0, 'Leu':0, 'Ile':0,
+                        'Glu':0, 'Gln':0, 'Asp':0, 'Asn':0, 'Met':0,
+                        'Ser':0, 'Thr':0, 'Phe':0, 'Trp':0, 'Tyr':0,
+                        'Arg':0, 'His':0, 'Cys':0, 'Pro':0, 'Lys':0}
+            for aa in translate(Seq, genetic_code=genetic_code):
+                if  aa != "*":
+                    AA_count[Seq1toSeq3[aa]] += 1        
+            AA_count_list.append(pd.DataFrame({ID:AA_count}))
+        self.AA_count_df = pd.concat(AA_count_list, axis=1)
         self.AA_Fraction_df = pd.DataFrame(data=None, dtype="float64", columns=self.AA_count_df.columns)
         for i in range(0, self.AA_count_df.shape[1]):
             self.AA_Fraction_df.iloc[:,i] = self.AA_count_df.iloc[:,i] / self.AA_count_df.iloc[:,i].sum()
+        
         AA_count_ca = prince.CA(n_components=2)
         self.AA_count_ca = AA_count_ca.fit(self.AA_count_df)
         AA_Fraction_ca = prince.CA(n_components=2)
@@ -2312,7 +3393,7 @@ class AAComposition_analysis():
                                "Arg": ("#91D1C2FF", "s", "Basic"), 
                                "His": ("#91D1C2FF", "p", "Basic")}
         
-    def get_PCA_df(self, dtype="Fraction"):
+    def get_PCA_df(self, dtype="Fraction", outfile=None):
         """
         Description
         ----------
@@ -2321,18 +3402,23 @@ class AAComposition_analysis():
         Parameters
         ----------
         dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             pca = self.AA_Fraction_pca
         else:
             pca = self.AA_count_pca
         PCA_df = pca.column_correlations
-        PCA_df.columns = [f"PCA1 ({pca.eigenvalues_summary.iloc[0, 1]})",
-                          f"PCA2 ({pca.eigenvalues_summary.iloc[1, 1]})"]
-        PCA_df.index.name = "Species"
-        return PCA_df
+        PCA_df.columns = [f"Dim1 ({pca.eigenvalues_summary.iloc[0, 1]})",
+                          f"Dim2 ({pca.eigenvalues_summary.iloc[1, 1]})"]
+        PCA_df.index.name = "Gene"
         
-    def get_COA_df(self, dtype="Fraction"):
+        if outfile != None:
+            PCA_df.to_csv(outfile, sep='\t')
+        else:
+            return PCA_df
+        
+    def get_COA_df(self, dtype="Fraction", outfile=None):
         """
         Description
         ----------
@@ -2341,6 +3427,7 @@ class AAComposition_analysis():
         Parameters
         ----------
         dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             ca = self.AA_Fraction_ca
@@ -2351,25 +3438,29 @@ class AAComposition_analysis():
             ca_column = ca.column_coordinates(self.AA_count_df)
             ca_row = ca.row_coordinates(self.AA_count_df)
         
-        ca_column["Type"] = "Species"
+        ca_column["Type"] = "Gene"
         ca_row["Type"] = "Codon"
         COA_df = pd.concat([ca_column, ca_row])
-        COA_df.columns = [f"COA1 ({ca.eigenvalues_summary.iloc[0, 1]})",
-                          f"COA2 ({ca.eigenvalues_summary.iloc[1, 1]})","Type"]
-        return COA_df
+        COA_df.columns = [f"Dim1 ({ca.eigenvalues_summary.iloc[0, 1]})",
+                          f"Dim2 ({ca.eigenvalues_summary.iloc[1, 1]})","Type"]
+        
+        if outfile != None:
+            COA_df.to_csv(outfile, sep='\t', index=None)
+        else:
+            return COA_df
     
     def draw_heatmap(self, 
                      dtype="Fraction",
                      figsize=None, 
                      cmap="Blues",
                      ax=None,
-                     ylabels_fontstyle='italic',
+                     ylabels_fontstyle='normal',
                      xlabels_fontstyle='normal',
                      ylabels_fontsize=10,
                      xlabels_fontsize=10,
                      show_ylabels=True,
-                     show_xlabels=True
-                    ):
+                     show_xlabels=True,
+                     outfile=None):
         """
         Description 
         -----------
@@ -2391,6 +3482,7 @@ class AAComposition_analysis():
         xlabels_fontsize: 10
         show_ylabels: {bool}
         show_xlabels: {bool}
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             df = self.AA_Fraction_df
@@ -2398,29 +3490,32 @@ class AAComposition_analysis():
             df = self.AA_count_df
             
         if figsize == None:
-            figsize = (14, df.shape[1]/2)
+            figsize = (9, df.shape[1]/3)
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
         sns.heatmap(df.T, cmap=cmap, ax=ax, 
                     yticklabels=show_ylabels,
                     xticklabels=show_xlabels)
-        ax.set_yticklabels(ax.get_yticklabels(),fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
-        ax.set_xticklabels(ax.get_xticklabels(),fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
+        ax.set_yticklabels(ax.get_yticklabels(), fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle, rotation=0)
+        ax.set_xticklabels(ax.get_xticklabels(), fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle, rotation=0)
         ax.set_xlabel("")
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def draw_clustermap(self, 
                         dtype="Fraction",
                         figsize=None, 
                         cmap="Blues",
-                        ylabels_fontstyle='italic',
+                        ylabels_fontstyle='normal',
                         xlabels_fontstyle='normal',
                         ylabels_fontsize=10,
                         xlabels_fontsize=10,
                         row_cluster=True,
                         col_cluster=True,
                         show_ylabels=True,
-                        show_xlabels=True):
+                        show_xlabels=True, 
+                        outfile=None):
         """
         Description 
         -----------
@@ -2442,6 +3537,7 @@ class AAComposition_analysis():
         xlabels_fontsize: 10
         show_ylabels: {bool}
         show_xlabels: {bool}
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             df = self.AA_Fraction_df
@@ -2449,7 +3545,7 @@ class AAComposition_analysis():
             df = self.AA_count_df
             
         if figsize == None:
-            figsize = (14, df.shape[1]/2)
+            figsize = (9, df.shape[1]/3)
         
         cmp = sns.clustermap(df.T,
                              figsize=figsize, 
@@ -2462,15 +3558,18 @@ class AAComposition_analysis():
         cmp.ax_heatmap.set_yticklabels(cmp.ax_heatmap.get_yticklabels(), fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
         cmp.ax_heatmap.set_xticklabels(cmp.ax_heatmap.get_xticklabels(), fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
         cmp.ax_heatmap.set_xlabel("")
+        if outfile != None:
+            cmp.savefig(outfile, dpi=600)
         return None
     
     def draw_boxplot(self,
                      dtype="Fraction",
-                     figsize = None,
-                     ax = None,
-                     fontstyle = 'italic',
-                     xlabel = None,
-                     fontsize = 10):
+                     figsize=None,
+                     ax=None,
+                     fontstyle='normal',
+                     xlabel=None,
+                     fontsize=10,
+                     outfile=None):
         """
         Description 
         -----------
@@ -2485,6 +3584,7 @@ class AAComposition_analysis():
              Axes in which to draw the plot, otherwise use the currently-active Axes.
         fontstyle: {'normal', 'italic', 'oblique'}
         fontsize: 10
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             df = self.AA_Fraction_df
@@ -2504,16 +3604,18 @@ class AAComposition_analysis():
         if xlabel == None and dtype == "count":
             xlabel = "Count"
         ax.set_xlabel(xlabel)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def draw_pearson_heatmap(self,
                              dtype="Fraction",
                              figsize=None, 
                              cmap="Blues",
-                             labels_fontstyle='italic',
+                             labels_fontstyle='normal',
                              labels_fontsize=10,
-                             ax = None
-                            ):
+                             ax=None, 
+                             outfile=None):
         """
         Description 
         -----------
@@ -2524,13 +3626,14 @@ class AAComposition_analysis():
         ----------
         dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
         figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        cmap: matplotlib colormap name or object, or list of colors, optional
+              The mapping from data values to color space. If not provided, the
+              default will depend on whether ``center`` is set.
+        ax: matplotlib Axes, optional 
+            Axes in which to draw the plot, otherwise use the currently-active Axes.
         labels_fontstyle: {'normal', 'italic', 'oblique'}
         labels_fontsize: 10
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             df = self.AA_Fraction_df
@@ -2547,32 +3650,37 @@ class AAComposition_analysis():
         sns.heatmap(corr, mask=mask, fmt=".2f", cmap="Blues", ax=ax)
         ax.set_xticklabels(ax.get_xticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
         ax.set_yticklabels(ax.get_yticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def draw_COA_plot(self,
                       dtype="Fraction",
                       figsize=(8,8),
-                      species_labels_color="black", 
-                      species_labels_style="italic", 
-                      species_labels_size = 8, 
-                      species_shapes_color = None, 
-                      species_shapes_size = 200, 
-                      species_labels_ha = "left", 
-                      species_labels_va = "bottom",
-                      amino_acid_labels_color = "black", 
-                      amino_acid_labels_size = 8, 
-                      amino_acid_shapes_size = 100,
-                      amino_acid_labels_ha = "left",
-                      amino_acid_labels_va = "bottom",
-                      show_species_labels = True,
-                      show_amino_acid_labels = True,
-                      title = None,
-                      xlabel = None,
-                      ylabel = None,
-                      title_size = 12,
-                      xlabel_size = 12,
-                      ylabel_size = 12,
-                      ax=None):
+                      gene_labels_color="black", 
+                      gene_labels_style="italic", 
+                      gene_labels_size=8, 
+                      gene_shapes_color=None, 
+                      gene_shapes_size=200, 
+                      gene_labels_ha="left", 
+                      gene_labels_va="bottom",
+                      amino_acid_labels_color="black", 
+                      amino_acid_labels_size=8, 
+                      amino_acid_shapes_size=100,
+                      amino_acid_labels_ha="left",
+                      amino_acid_labels_va="bottom",
+                      show_gene_labels=True,
+                      show_gene = True,
+                      show_amino_acid_labels=True,
+                      show_amino_acid = True,
+                      title=None,
+                      xlabel=None,
+                      ylabel=None,
+                      title_size=12,
+                      xlabel_size=12,
+                      ylabel_size=12,
+                      ax=None, 
+                      outfile=None):
         """
         Description
         ----------
@@ -2581,16 +3689,18 @@ class AAComposition_analysis():
         Parameters
         ----------
         dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        show_species_labels: {bool, ["species1", "species2", ...]} show species name in plot.
-        show_amino_acid_labels: {bool, ["codon1", "codon2", ...]} show amino acid in plot.
+        show_gene_labels: {bool, ["gene1", "gene2", ...]} show gene labels in plot.
+        show_gene: show gene in plot.
+        show_amino_acid_labels: {bool, ["codon1", "codon2", ...]} show amino acid labels in plot.
+        show_amino_acid: {bool} show amino acid in plot.
         figsize: (8,8)
-        species_labels_color: "black"
-        species_labels_style: {'normal', 'italic', 'oblique'}
-        species_labels_size: 8,
-        species_shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        species_shapes_size: 200,
-        species_labels_ha: {"left", "right", "top", "bottom", "center"}
-        species_labels_va: {"left", "right", "top", "bottom", "center"}
+        gene_labels_color: "black"
+        gene_labels_style: {'normal', 'italic', 'oblique'}
+        gene_labels_size: 8,
+        gene_shapes_color: {None, {"gene1": "red", "gene2":"blue", ... }}
+        gene_shapes_size: 200,
+        gene_labels_ha: {"left", "right", "top", "bottom", "center"}
+        gene_labels_va: {"left", "right", "top", "bottom", "center"}
         amino_acid_labels_color: "black",
         amino_acid_labels_size: 8,
         amino_acid_shapes_size: 100,
@@ -2603,6 +3713,7 @@ class AAComposition_analysis():
         xlabel_size: 12
         ylabel_size: 12
         ax: {None, Aexs}
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             df = self.AA_Fraction_df
@@ -2614,81 +3725,85 @@ class AAComposition_analysis():
             ca = self.AA_count_ca
             row_coords = ca.row_coordinates(df)
             col_coords = ca.column_coordinates(df)
-            
+        
         row_coords = row_coords.loc[self.AAColorShapeType.keys(), :]
         
         # Plotting the results
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
-
+        
         # Adding labels
-        if show_amino_acid_labels !=None and show_amino_acid_labels !=False:
-            if isinstance(show_amino_acid_labels, list):
-                for i, amino_acid in enumerate(df.index):
-                    if amino_acid in show_amino_acid_labels:
+        if show_amino_acid:
+            if show_amino_acid_labels !=None and show_amino_acid_labels !=False:
+                if isinstance(show_amino_acid_labels, list):
+                    for i, amino_acid in enumerate(df.index):
+                        if amino_acid in show_amino_acid_labels:
+                            ax.annotate(amino_acid, 
+                                        (row_coords[0][i], row_coords[1][i]), 
+                                        color=amino_acid_labels_color, 
+                                        fontsize=amino_acid_labels_size, 
+                                        ha=amino_acid_labels_ha, 
+                                        va=amino_acid_labels_va) 
+                else:
+                    for i, amino_acid in enumerate(df.index):
                         ax.annotate(amino_acid, 
                                     (row_coords[0][i], row_coords[1][i]), 
-                                    color=amino_acid_labels_color, 
+                                    color=amino_acid_labels_color,
                                     fontsize=amino_acid_labels_size, 
                                     ha=amino_acid_labels_ha, 
-                                    va=amino_acid_labels_va) 
-            else:
-                for i, amino_acid in enumerate(df.index):
-                    ax.annotate(amino_acid, 
-                                (row_coords[0][i], row_coords[1][i]), 
-                                color=amino_acid_labels_color,
-                                fontsize=amino_acid_labels_size, 
-                                ha=amino_acid_labels_ha, 
-                                va=amino_acid_labels_va)
-
-        if show_species_labels != None and show_species_labels !=False:
-            if isinstance(show_species_labels, list):
-                for i, spceies in enumerate(df.columns):
-                    if spceies in show_species_labels:
+                                    va=amino_acid_labels_va)
+        if show_gene:
+            if show_gene_labels != None and show_gene_labels !=False:
+                if isinstance(show_gene_labels, list):
+                    for i, spceies in enumerate(df.columns):
+                        if spceies in show_gene_labels:
+                            ax.annotate(spceies, 
+                                        (col_coords[0][i], col_coords[1][i]), 
+                                        color=gene_labels_color, 
+                                        fontsize=gene_labels_size, 
+                                        style = gene_labels_style,
+                                        ha = gene_labels_ha,
+                                        va = gene_labels_va)
+                else:
+                    for i, spceies in enumerate(df.columns):
                         ax.annotate(spceies, 
                                     (col_coords[0][i], col_coords[1][i]), 
-                                    color=species_labels_color, 
-                                    fontsize=species_labels_size, 
-                                    style = species_labels_style,
-                                    ha = species_labels_ha,
-                                    va = species_labels_va)
-            else:
-                for i, spceies in enumerate(df.columns):
-                    ax.annotate(spceies, 
-                                (col_coords[0][i], col_coords[1][i]), 
-                                color=species_labels_color,
-                                fontsize=species_labels_size,
-                                style = species_labels_style,
-                                ha = species_labels_ha,
-                                va = species_labels_va)
-        # Adding points            
+                                    color=gene_labels_color,
+                                    fontsize=gene_labels_size,
+                                    style = gene_labels_style,
+                                    ha = gene_labels_ha,
+                                    va = gene_labels_va)
+        # Adding points
         Pa_list = []
-        for i in range(0,len(row_coords)):
-            Pa = ax.scatter(row_coords[0][i], row_coords[1][i], 
-                            c=self.AAColorShapeType[row_coords.index[i]][0], 
-                            label=row_coords.index[i],
-                            marker=self.AAColorShapeType[row_coords.index[i]][1],
-                            s=amino_acid_shapes_size)
-            Pa_list.append(Pa)
-
+        if show_amino_acid:
+            for i in range(0,len(row_coords)):
+                Pa = ax.scatter(row_coords[0][i], row_coords[1][i], 
+                                c=self.AAColorShapeType[row_coords.index[i]][0], 
+                                label=row_coords.index[i],
+                                marker=self.AAColorShapeType[row_coords.index[i]][1],
+                                s=amino_acid_shapes_size)
+                Pa_list.append(Pa)
+        
+        
         Ps_list = []
-        for i in range(0, len(col_coords)):
-            if isinstance(species_shapes_color, dict):
-                Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
-                                c=species_shapes_color.get(col_coords.index[i],"#E64B35FF"), 
-                                label=col_coords.index[i],
-                                marker="*", 
-                                s=species_shapes_size)
-                Ps_list.append(Ps)
-            else:
-                Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
-                                 c='#E64B35FF', 
-                                 label='Species', 
-                                 marker="*", 
-                                 s=species_shapes_size)
-                if i == 0:
+        if show_gene:
+            for i in range(0, len(col_coords)):
+                if isinstance(gene_shapes_color, dict):
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                    c=gene_shapes_color.get(col_coords.index[i],"#E64B35FF"), 
+                                    label=col_coords.index[i],
+                                    marker="*", 
+                                    s=gene_shapes_size)
                     Ps_list.append(Ps)
-
+                else:
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                     c='#E64B35FF', 
+                                     label='Genes', 
+                                     marker="*", 
+                                     s=gene_shapes_size)
+                    if i == 0:
+                        Ps_list.append(Ps)
+                        
         # Adding legend
         ax.legend(handles=[*tuple(Pa_list), *tuple(Ps_list)],
                   loc='upper left', 
@@ -2708,29 +3823,31 @@ class AAComposition_analysis():
         ax.set_title(title, size=title_size)
         ax.set_xlabel(xlabel, size=xlabel_size)
         ax.set_ylabel(ylabel, size=ylabel_size)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
-    
     
     def draw_PCA_plot(self,
                       dtype="Fraction",
                       figsize=(6,6), 
                       labels_color="black", 
                       labels_style="italic", 
-                      labels_size = 8, 
-                      shapes_color = '#E64B35FF', 
-                      shapes_type = '*',
-                      shapes_size = 100, 
-                      labels_ha = "left", 
-                      labels_va = "bottom",
-                      title = None,
-                      xlabel = None,
-                      ylabel = None,
-                      title_size = 12,
-                      xlabel_size = 12,
-                      ylabel_size = 12,
-                      show_labels = True,
-                      show_legend = False,
-                      ax=None):
+                      labels_size=8, 
+                      shapes_color='#E64B35FF', 
+                      shapes_type='*',
+                      shapes_size=100, 
+                      labels_ha="left", 
+                      labels_va="bottom",
+                      title=None,
+                      xlabel=None,
+                      ylabel=None,
+                      title_size=12,
+                      xlabel_size=12,
+                      ylabel_size=12,
+                      show_labels=True,
+                      show_legend=False,
+                      ax=None, 
+                      outfile=None):
         """
         Description 
         ----------
@@ -2739,14 +3856,14 @@ class AAComposition_analysis():
         Parameters
         ----------
         dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
+        show_labels: {bool, ["gene1", "gene2", ...]} show column names in plot.
         show_legend: {bool}
         figsize: (6,6)
         labels_color: black
         labels_style: {'normal', 'italic', 'oblique'}
         labels_size: 8,
-        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
+        shapes_color: {None, {"gene1": "red", "gene2":"blue", ... }}
+        shapes_type: {None, {"gene1": "*", "gene":"<", ... }}
         shapes_size: 100,
         labels_ha: {"left", "right", "top", "bottom", "center"}
         labels_va: {"left", "right", "top", "bottom", "center"}
@@ -2754,6 +3871,7 @@ class AAComposition_analysis():
         xlabel {None, str}
         ylabel {None, str}
         ax: {None, Aexs}
+        outfile: A path of outfile.
         """
         if dtype == "Fraction":
             pca = self.AA_Fraction_pca
@@ -2823,6 +3941,8 @@ class AAComposition_analysis():
                       frameon=False,
                       shadow=False,
                       title='')
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def get_shape_and_color(self, length):
@@ -2838,8 +3958,906 @@ class AAComposition_analysis():
             res.append(l[i%n])
         return res
     
-class StopCodon_analysis():
+    def get_tree(self, metric='euclidean', outgroup="midpoint", tree_method="nj", dtype="Fraction"):
+        """
+        Description 
+        -----------
+        Return a tree object from TreeNode class of scikit-bio. 
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+        else:
+            df = self.AA_count_df
+        
+        dist = pdist(np.matrix(df.T), metric=metric)
+        dist_matrix = DistanceMatrix(squareform(dist), ids=list(df.T.index))
+        if tree_method == 'nj':
+            tree = nj(dist_matrix)
+        elif tree_method == 'upgma':
+            tree = upgma(dist_matrix)
+        elif tree_method == "gme":
+            tree = gme(dist_matrix)
+        elif tree_method == 'bme':
+            tree = bme(dist_matrix)
+            
+        if outgroup == None:
+            pass
+        elif outgroup == "midpoint":
+            tree = tree.root_at_midpoint(inplace=False, reset=True)
+        else:
+            tree = tree.root_by_outgroup(outgroup)
+        return tree
+    
+    def get_tree_newick_string(self, metric='euclidean', outgroup="midpoint", tree_method="nj", dtype="Fraction"):
+        """
+        Description 
+        -----------
+        Return a tree string of newick format. 
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        tree = self.get_tree(metric, outgroup, tree_method, dtype)
+        f = io.StringIO()
+        tree.write(f)
+        f.seek(0)
+        tree_str = f.read()
+        f.close()
+        return tree_str[:-1]
+    
+    def draw_tree_plot(self,
+                       figsize=(8,8), 
+                       ax=None,
+                       tree_method="nj",
+                       metric='euclidean',
+                       outgroup="midpoint",
+                       ignore_branch_length=True,
+                       ladderize=True,
+                       ladderize_by="size",
+                       ladderize_direction="right",
+                       leaf_label_size=10,
+                       linewidth=1.5,
+                       width=10,
+                       height=0.7, 
+                       outfile=None, 
+                       dtype="Fraction"):
+        """
+        Description 
+        -----------
+        Draw tree plot of amino acid composition by NJ method.
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        figsize: tuple of (width, height), optional
+        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
+        ignore_branch_length : {bool} Ignore branch lengths for cladogram
+        innode_label_size : {float} Font size for internal node labels.
+        ladderize : {bool} Enable ladderize tree sorting.
+        ladderize_by : {size, branch_length} Sort criterion.
+        ladderize_direction : {left, right} Direction for larger subtrees.
+        leaf_label_size : {float} Font size for leaf labels.
+        linewidth : {float} Branch line width.
+        height : Figure height per leaf node.
+        width : Figure width.
+        outfile: A path of outfile.
+        """
+        tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method, dtype=dtype)
+        plotter = TreePlotter(tree, 
+                              ignore_branch_length=ignore_branch_length,
+                              ladderize=ladderize,
+                              ladderize_by=ladderize_by,
+                              ladderize_direction=ladderize_direction,
+                              leaf_label_size=leaf_label_size,
+                              linewidth=linewidth,
+                              width=width,
+                              height=height)
+        
+        #plotter.add_scale_bar(length=0.5, label="Scale", position=(0, 0))
+        plotter.plot(figsize=figsize, ax=ax, outfile=outfile)
+        return None
+
+class AA_Composition_Multiple_Species_Analysis():
+    def __init__(self, data, genetic_code):
+        """
+        Description
+        ----------
+        Amino acid composition analysis of multiple species.
+        
+        Parameters
+        ----------
+        data: [("species name", "cds file path"), ...]
+        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        """
+        
+        Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
+        
+        AA_count_dict = {}
+        for prefix, file in data:
+            AA_count = defaultdict(int)
+            for ID, Seq in FastaIO(file):
+                for i in translate(Seq, genetic_code=genetic_code):
+                    AA_count[i] = AA_count[i] + 1
+                    
+            AA_count_dict.setdefault(prefix, {Seq1toSeq3[AA]:AA_count[AA] for AA in AA_count if AA in Seq1toSeq3})
+        
+        self.AA_count_df = pd.DataFrame(AA_count_dict)
+        self.AA_Fraction_df = pd.DataFrame(data=None, dtype="float64", columns=self.AA_count_df.columns)
+        for i in range(0, self.AA_count_df.shape[1]):
+            self.AA_Fraction_df.iloc[:,i] = self.AA_count_df.iloc[:,i] / self.AA_count_df.iloc[:,i].sum()
+        AA_count_ca = prince.CA(n_components=2)
+        self.AA_count_ca = AA_count_ca.fit(self.AA_count_df)
+        AA_Fraction_ca = prince.CA(n_components=2)
+        self.AA_Fraction_ca = AA_Fraction_ca.fit(self.AA_Fraction_df)
+        AA_count_pca = prince.PCA(n_components=2)
+        self.AA_count_pca = AA_count_pca.fit(self.AA_count_df)
+        AA_Fraction_pca = prince.PCA(n_components=2)
+        self.AA_Fraction_pca = AA_Fraction_pca.fit(self.AA_Fraction_df)
+        self.AAColorShapeType={"Gly": ("#4DBBD5FF", "o", "Nonpolar"),
+                               "Ala": ("#4DBBD5FF", "v", "Nonpolar"),
+                               "Val": ("#4DBBD5FF", "^", "Nonpolar"),
+                               "Leu": ("#4DBBD5FF", "<", "Nonpolar"),
+                               "Ile": ("#4DBBD5FF", ">", "Nonpolar"),
+                               "Phe": ("#4DBBD5FF", "s", "Nonpolar"),
+                               "Pro": ("#4DBBD5FF", "p", "Nonpolar"),
+                               "Met": ("#4DBBD5FF", "d", "Nonpolar"),
+                               "Trp": ("#4DBBD5FF", "+", "Nonpolar"),
+                               "Ser": ("#F39B7FFF", "o", "Polar"), 
+                               "Thr": ("#F39B7FFF", "s", "Polar"), 
+                               "Cys": ("#F39B7FFF", "p", "Polar"), 
+                               "Asn": ("#F39B7FFF", "+", "Polar"), 
+                               "Gln": ("#F39B7FFF", "d", "Polar"), 
+                               "Tyr": ("#F39B7FFF", "^", "Polar"), 
+                               "Asp": ("#8491B4FF", "o", "Acidic"),
+                               "Glu": ("#8491B4FF", "s", "Acidic"),
+                               "Lys": ("#91D1C2FF", "o", "Basic"), 
+                               "Arg": ("#91D1C2FF", "s", "Basic"), 
+                               "His": ("#91D1C2FF", "p", "Basic")}
+        
+    def get_PCA_df(self, dtype="Fraction", outfile=None):
+        """
+        Description
+        ----------
+        get PCA data.
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            pca = self.AA_Fraction_pca
+        else:
+            pca = self.AA_count_pca
+        PCA_df = pca.column_correlations
+        PCA_df.columns = [f"Dim1 ({pca.eigenvalues_summary.iloc[0, 1]})",
+                          f"Dim2 ({pca.eigenvalues_summary.iloc[1, 1]})"]
+        PCA_df.index.name = "Species"
+        
+        if outfile != None:
+            PCA_df.to_csv(outfile, sep='\t')
+        else:
+            return PCA_df
+        
+    def get_COA_df(self, dtype="Fraction", outfile=None):
+        """
+        Description
+        ----------
+        get COA data.
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            ca = self.AA_Fraction_ca
+            ca_column = ca.column_coordinates(self.AA_Fraction_df)
+            ca_row = ca.row_coordinates(self.AA_Fraction_df)
+        else:
+            ca = self.AA_count_ca
+            ca_column = ca.column_coordinates(self.AA_count_df)
+            ca_row = ca.row_coordinates(self.AA_count_df)
+        
+        ca_column["Type"] = "Species"
+        ca_row["Type"] = "Codon"
+        COA_df = pd.concat([ca_column, ca_row])
+        COA_df.columns = [f"Dim1 ({ca.eigenvalues_summary.iloc[0, 1]})",
+                          f"Dim2 ({ca.eigenvalues_summary.iloc[1, 1]})","Type"]
+        
+        if outfile != None:
+            COA_df.to_csv(outfile, sep='\t', index=None)
+        else:
+            return COA_df
+    
+    def draw_heatmap(self, 
+                     dtype="Fraction",
+                     figsize=None, 
+                     cmap="Blues",
+                     ax=None,
+                     ylabels_fontstyle='italic',
+                     xlabels_fontstyle='normal',
+                     ylabels_fontsize=10,
+                     xlabels_fontsize=10,
+                     show_ylabels=True,
+                     show_xlabels=True,
+                     outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw heatmap of count or Fraction.
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        figsize: tuple of (width, height), optional
+        cmap : matplotlib colormap name or object, or list of colors, optional
+               The mapping from data values to color space. If not provided, the
+               default will depend on whether ``center`` is set.
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
+        ylabels_fontsize: 10
+        xlabels_fontsize: 10
+        show_ylabels: {bool}
+        show_xlabels: {bool}
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+        else:
+            df = self.AA_count_df
+            
+        if figsize == None:
+            figsize = (9, df.shape[1]/3)
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(df.T, cmap=cmap, ax=ax, 
+                    yticklabels=show_ylabels,
+                    xticklabels=show_xlabels)
+        ax.set_yticklabels(ax.get_yticklabels(),fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle, rotation=0)
+        ax.set_xticklabels(ax.get_xticklabels(),fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle, rotation=0)
+        ax.set_xlabel("")
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_clustermap(self, 
+                        dtype="Fraction",
+                        figsize=None, 
+                        cmap="Blues",
+                        ylabels_fontstyle='italic',
+                        xlabels_fontstyle='normal',
+                        ylabels_fontsize=10,
+                        xlabels_fontsize=10,
+                        row_cluster=True,
+                        col_cluster=True,
+                        show_ylabels=True,
+                        show_xlabels=True, 
+                        outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw clustermap of count or Fraction.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        cmap : matplotlib colormap name or object, or list of colors, optional
+               The mapping from data values to color space. If not provided, the
+               default will depend on whether ``center`` is set.
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
+        ylabels_fontsize: 10
+        xlabels_fontsize: 10
+        show_ylabels: {bool}
+        show_xlabels: {bool}
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+        else:
+            df = self.AA_count_df
+            
+        if figsize == None:
+            figsize = (9, df.shape[1]/3)
+        
+        cmp = sns.clustermap(df.T,
+                             figsize=figsize, 
+                             cmap=cmap,
+                             row_cluster = row_cluster,
+                             col_cluster = col_cluster,
+                             yticklabels = show_ylabels,
+                             xticklabels = show_xlabels
+                            )
+        cmp.ax_heatmap.set_yticklabels(cmp.ax_heatmap.get_yticklabels(), fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
+        cmp.ax_heatmap.set_xticklabels(cmp.ax_heatmap.get_xticklabels(), fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
+        cmp.ax_heatmap.set_xlabel("")
+        if outfile != None:
+            cmp.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_boxplot(self,
+                     dtype="Fraction",
+                     figsize=None,
+                     ax=None,
+                     fontstyle='italic',
+                     xlabel=None,
+                     fontsize=10,
+                     outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw boxplot of count or Fraction.
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        figsize: tuple of (width, height), optional
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        fontstyle: {'normal', 'italic', 'oblique'}
+        fontsize: 10
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+        else:
+            df = self.AA_count_df
+            
+        if figsize == None:
+            figsize = (4, df.shape[1]/4)
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        sns.boxplot(df, orient='h', ax=ax)
+        ax.set_yticks(ax.get_yticks())
+        ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
+        if xlabel == None and dtype == "Fraction":
+            xlabel = "Fraction"
+        if xlabel == None and dtype == "count":
+            xlabel = "Count"
+        ax.set_xlabel(xlabel)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_pearson_heatmap(self,
+                             dtype="Fraction",
+                             figsize=None, 
+                             cmap="Blues",
+                             labels_fontstyle='italic',
+                             labels_fontsize=10,
+                             ax=None, 
+                             outfile=None):
+        """
+        Description 
+        -----------
+        
+        Draw pearson heatmap of count or Fraction.
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        figsize: tuple of (width, height), optional
+        cmap: matplotlib colormap name or object, or list of colors, optional
+              The mapping from data values to color space. If not provided, the
+              default will depend on whether ``center`` is set.
+        ax: matplotlib Axes, optional 
+            Axes in which to draw the plot, otherwise use the currently-active Axes.
+        labels_fontstyle: {'normal', 'italic', 'oblique'}
+        labels_fontsize: 10
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+        else:
+            df = self.AA_count_df
+            
+        if figsize == None:
+            figsize = (df.shape[1]/4+1, df.shape[1]/4)
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        corr = df.corr(method='pearson')
+        mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
+        sns.heatmap(corr, mask=mask, fmt=".2f", cmap="Blues", ax=ax)
+        ax.set_xticklabels(ax.get_xticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        ax.set_yticklabels(ax.get_yticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_COA_plot(self,
+                      dtype="Fraction",
+                      figsize=(8,8),
+                      species_labels_color="black", 
+                      species_labels_style="italic", 
+                      species_labels_size=8, 
+                      species_shapes_color=None, 
+                      species_shapes_size=200, 
+                      species_labels_ha="left", 
+                      species_labels_va="bottom",
+                      amino_acid_labels_color="black", 
+                      amino_acid_labels_size=8, 
+                      amino_acid_shapes_size=100,
+                      amino_acid_labels_ha="left",
+                      amino_acid_labels_va="bottom",
+                      show_species_labels=True,
+                      show_species = True,
+                      show_amino_acid_labels=True,
+                      show_amino_acid = True,
+                      title=None,
+                      xlabel=None,
+                      ylabel=None,
+                      title_size=12,
+                      xlabel_size=12,
+                      ylabel_size=12,
+                      ax=None, 
+                      outfile=None):
+        """
+        Description
+        ----------
+        Draw correspondence analysis of amino acid composition plot.
+
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        show_species_labels: {bool, ["species1", "species2", ...]} show species labels in plot.
+        show_species: show species in plot.
+        show_amino_acid_labels: {bool, ["codon1", "codon2", ...]} show amino acid labels in plot.
+        show_amino_acid: {bool} show amino acid in plot.
+        figsize: (8,8)
+        species_labels_color: "black"
+        species_labels_style: {'normal', 'italic', 'oblique'}
+        species_labels_size: 8,
+        species_shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
+        species_shapes_size: 200,
+        species_labels_ha: {"left", "right", "top", "bottom", "center"}
+        species_labels_va: {"left", "right", "top", "bottom", "center"}
+        amino_acid_labels_color: "black",
+        amino_acid_labels_size: 8,
+        amino_acid_shapes_size: 100,
+        amino_acid_labels_ha: {"left", "right", "top", "bottom", "center"}
+        amino_acid_labels_va: {"left", "right", "top", "bottom", "center"}
+        title {None, str}
+        xlabel {None, str}
+        ylabel {None, str}
+        title_size: 12
+        xlabel_size: 12
+        ylabel_size: 12
+        ax: {None, Aexs}
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+            ca = self.AA_Fraction_ca
+            row_coords = ca.row_coordinates(df)
+            col_coords = ca.column_coordinates(df)
+        else:
+            df = self.AA_count_df
+            ca = self.AA_count_ca
+            row_coords = ca.row_coordinates(df)
+            col_coords = ca.column_coordinates(df)
+            
+        row_coords = row_coords.loc[self.AAColorShapeType.keys(), :]
+        
+        # Plotting the results
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+
+        # Adding labels
+        if show_amino_acid:
+            if show_amino_acid_labels !=None and show_amino_acid_labels !=False:
+                if isinstance(show_amino_acid_labels, list):
+                    for i, amino_acid in enumerate(df.index):
+                        if amino_acid in show_amino_acid_labels:
+                            ax.annotate(amino_acid, 
+                                        (row_coords[0][i], row_coords[1][i]), 
+                                        color=amino_acid_labels_color, 
+                                        fontsize=amino_acid_labels_size, 
+                                        ha=amino_acid_labels_ha, 
+                                        va=amino_acid_labels_va) 
+                else:
+                    for i, amino_acid in enumerate(df.index):
+                        ax.annotate(amino_acid, 
+                                    (row_coords[0][i], row_coords[1][i]), 
+                                    color=amino_acid_labels_color,
+                                    fontsize=amino_acid_labels_size, 
+                                    ha=amino_acid_labels_ha, 
+                                    va=amino_acid_labels_va)
+        if show_species:
+            if show_species_labels != None and show_species_labels !=False:
+                if isinstance(show_species_labels, list):
+                    for i, spceies in enumerate(df.columns):
+                        if spceies in show_species_labels:
+                            ax.annotate(spceies, 
+                                        (col_coords[0][i], col_coords[1][i]), 
+                                        color=species_labels_color, 
+                                        fontsize=species_labels_size, 
+                                        style = species_labels_style,
+                                        ha = species_labels_ha,
+                                        va = species_labels_va)
+                else:
+                    for i, spceies in enumerate(df.columns):
+                        ax.annotate(spceies, 
+                                    (col_coords[0][i], col_coords[1][i]), 
+                                    color=species_labels_color,
+                                    fontsize=species_labels_size,
+                                    style = species_labels_style,
+                                    ha = species_labels_ha,
+                                    va = species_labels_va)
+        # Adding points
+        Pa_list = []
+        if show_amino_acid:
+            for i in range(0,len(row_coords)):
+                Pa = ax.scatter(row_coords[0][i], row_coords[1][i], 
+                                c=self.AAColorShapeType[row_coords.index[i]][0], 
+                                label=row_coords.index[i],
+                                marker=self.AAColorShapeType[row_coords.index[i]][1],
+                                s=amino_acid_shapes_size)
+                Pa_list.append(Pa)
+        
+        
+        Ps_list = []
+        if show_species:
+            for i in range(0, len(col_coords)):
+                if isinstance(species_shapes_color, dict):
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                    c=species_shapes_color.get(col_coords.index[i],"#E64B35FF"), 
+                                    label=col_coords.index[i],
+                                    marker="*", 
+                                    s=species_shapes_size)
+                    Ps_list.append(Ps)
+                else:
+                    Ps = ax.scatter(col_coords[0][i], col_coords[1][i], 
+                                     c='#E64B35FF', 
+                                     label='Species', 
+                                     marker="*", 
+                                     s=species_shapes_size)
+                    if i == 0:
+                        Ps_list.append(Ps)
+                        
+        # Adding legend
+        ax.legend(handles=[*tuple(Pa_list), *tuple(Ps_list)],
+                  loc='upper left', 
+                  bbox_to_anchor=(1, 1),
+                  ncol=1,
+                  frameon=False,
+                  shadow=False,
+                  title='')
+
+        # Adding title, xlabel, and ylabel
+        if title == None:
+            title = 'Correspondence analysis of amino acid composition'
+        if xlabel == None:
+            xlabel = f'Dim 1 ({ca.eigenvalues_summary.iloc[0,1]})'
+        if ylabel == None:
+            ylabel = f'Dim 2 ({ca.eigenvalues_summary.iloc[1,1]})'
+        ax.set_title(title, size=title_size)
+        ax.set_xlabel(xlabel, size=xlabel_size)
+        ax.set_ylabel(ylabel, size=ylabel_size)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    
+    def draw_PCA_plot(self,
+                      dtype="Fraction",
+                      figsize=(6,6), 
+                      labels_color="black", 
+                      labels_style="italic", 
+                      labels_size=8, 
+                      shapes_color='#E64B35FF', 
+                      shapes_type='*',
+                      shapes_size=100, 
+                      labels_ha="left", 
+                      labels_va="bottom",
+                      title=None,
+                      xlabel=None,
+                      ylabel=None,
+                      title_size=12,
+                      xlabel_size=12,
+                      ylabel_size=12,
+                      show_labels=True,
+                      show_legend=False,
+                      ax=None, 
+                      outfile=None):
+        """
+        Description 
+        ----------
+        Draw principal component analysis of amino acid composition plot.
+
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
+        show_legend: {bool}
+        figsize: (6,6)
+        labels_color: black
+        labels_style: {'normal', 'italic', 'oblique'}
+        labels_size: 8,
+        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
+        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
+        shapes_size: 100,
+        labels_ha: {"left", "right", "top", "bottom", "center"}
+        labels_va: {"left", "right", "top", "bottom", "center"}
+        title {None, str}
+        xlabel {None, str}
+        ylabel {None, str}
+        ax: {None, Aexs}
+        outfile: A path of outfile.
+        """
+        if dtype == "Fraction":
+            pca = self.AA_Fraction_pca
+        else:
+            pca = self.AA_count_pca
+            
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        
+        for z, i in zip(self.get_shape_and_color(pca.column_correlations.shape[0]),
+                        range(pca.column_correlations.shape[0])):
+            x = pca.column_correlations[0][i]
+            y = pca.column_correlations[1][i]
+            label = pca.column_correlations.index[i]
+            shape_type=z[0]
+            shape_color=z[1]
+            
+            if shapes_type !=None:
+                if isinstance(shapes_type, dict):
+                    shape_type = shapes_type.get(label, z[0])
+                else:
+                    shape_type = shapes_type
+            
+            if shapes_color !=None:
+                if isinstance(shapes_color, dict):
+                    shape_color = shapes_color.get(label, z[1])
+                else:
+                    shape_color = shapes_color
+            
+            ax.scatter(x,y, label=label, 
+                       marker=shape_type, 
+                       color=shape_color,
+                       s=shapes_size)
+            
+            if isinstance(show_labels, list):
+                if label in show_labels:
+                    ax.annotate(label, (x,y), 
+                                color=labels_color,
+                                fontsize=labels_size,
+                                style = labels_style,
+                                ha = labels_ha,
+                                va = labels_va)
+            else:
+                if show_labels:
+                    ax.annotate(label, (x,y), 
+                                color=labels_color,
+                                fontsize=labels_size,
+                                style = labels_style,
+                                ha = labels_ha,
+                                va = labels_va)
+        
+        if title == None:
+            title = f'Principal component analysis'
+        if xlabel == None:
+            xlabel = f"Dim1 ({pca.eigenvalues_summary.iloc[0,1]})"
+        if ylabel == None:
+            ylabel = f"Dim2 ({pca.eigenvalues_summary.iloc[1,1]})"
+        
+        ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        
+        if show_legend == True:
+            ax.legend(loc='center left',  
+                      bbox_to_anchor=(1, 0.5),
+                      ncol=1,
+                      frameon=False,
+                      shadow=False,
+                      title='')
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def get_shape_and_color(self, length):
+        shapes = ["o", "s", "^", "<", ">", "v", "p", "P", "*", "h", "H", "+", "x", "X", "D", "d", "8"]
+        colors = ["#1F77B4FF", "#FF7F0EFF", "#2CA02CFF", "#D62728FF", "#9467BDFF", "#8C564BFF", "#E377C2FF", "#7F7F7FFF", "#BCBD22FF", "#17BECFFF"]
+        n = len(shapes) * len(colors)
+        l = []
+        for x in shapes:
+            for y in colors:
+                l.append((x, y))
+        res = []
+        for i in range(0, length):
+            res.append(l[i%n])
+        return res
+    
+    def get_tree(self, metric='euclidean', outgroup="midpoint", tree_method="nj", dtype="Fraction"):
+        """
+        Description 
+        -----------
+        Return a tree object from TreeNode class of scikit-bio. 
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        
+        if dtype == "Fraction":
+            df = self.AA_Fraction_df
+        else:
+            df = self.AA_count_df
+        
+        dist = pdist(np.matrix(df.T), metric=metric)
+        dist_matrix = DistanceMatrix(squareform(dist), ids=list(df.T.index))
+        if tree_method == 'nj':
+            tree = nj(dist_matrix)
+        elif tree_method == 'upgma':
+            tree = upgma(dist_matrix)
+        elif tree_method == "gme":
+            tree = gme(dist_matrix)
+        elif tree_method == 'bme':
+            tree = bme(dist_matrix)
+            
+        if outgroup == None:
+            pass
+        elif outgroup == "midpoint":
+            tree = tree.root_at_midpoint(inplace=False, reset=True)
+        else:
+            tree = tree.root_by_outgroup(outgroup)
+        return tree
+    
+    def get_tree_newick_string(self, metric='euclidean', outgroup="midpoint", tree_method="nj", dtype="Fraction"):
+        """
+        Description 
+        -----------
+        Return a tree string of newick format. 
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        """
+        tree = self.get_tree(metric, outgroup, tree_method, dtype)
+        f = io.StringIO()
+        tree.write(f)
+        f.seek(0)
+        tree_str = f.read()
+        f.close()
+        return tree_str[:-1]
+    
+    def draw_tree_plot(self,
+                       figsize=(8,8), 
+                       ax=None,
+                       tree_method="nj",
+                       metric='euclidean',
+                       outgroup="midpoint",
+                       ignore_branch_length=True,
+                       ladderize=True,
+                       ladderize_by="size",
+                       ladderize_direction="right",
+                       leaf_label_size=10,
+                       linewidth=1.5,
+                       width=10,
+                       height=0.7, 
+                       outfile=None, 
+                       dtype="Fraction"):
+        """
+        Description 
+        -----------
+        Draw tree plot of amino acid composition by NJ method.
+        
+        Parameters
+        ----------
+        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
+        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
+        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
+        correlation, cosine, dice, hamming, jaccard, jensenshannon,
+        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+        russellrao, seuclidean, sokalmichener, sokalsneath,
+        sqeuclidean, yule} The distance metric to use. 
+        Euclidean distance, high sensitivity, suitable for related species;
+        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
+        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        figsize: tuple of (width, height), optional
+        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
+        ignore_branch_length : {bool} Ignore branch lengths for cladogram
+        innode_label_size : {float} Font size for internal node labels.
+        ladderize : {bool} Enable ladderize tree sorting.
+        ladderize_by : {size, branch_length} Sort criterion.
+        ladderize_direction : {left, right} Direction for larger subtrees.
+        leaf_label_size : {float} Font size for leaf labels.
+        linewidth : {float} Branch line width.
+        height : Figure height per leaf node.
+        width : Figure width.
+        outfile: A path of outfile.
+        """
+        tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method, dtype=dtype)
+        plotter = TreePlotter(tree, 
+                              ignore_branch_length=ignore_branch_length,
+                              ladderize=ladderize,
+                              ladderize_by=ladderize_by,
+                              ladderize_direction=ladderize_direction,
+                              leaf_label_size=leaf_label_size,
+                              linewidth=linewidth,
+                              width=width,
+                              height=height)
+        
+        #plotter.add_scale_bar(length=0.5, label="Scale", position=(0, 0))
+        plotter.plot(figsize=figsize, ax=ax, outfile=outfile)
+        return None
+    
+class Stop_Codon_Analysis():
     def __init__(self, data, genetic_code, incomplete_codon=True):
+        """
+        Description
+        ----------
+        Stop codon analysis of multiple species.
+        
+        Parameters
+        ----------
+        data: [("species name", "cds file path"), ...]
+        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        incomplete_codon: {bool} Whether it contains incomplete codon, which is crucial for mitochondrial genes.
+        """
         StopCodon_Count_dict = {}
         GeneName2StopCodon_dict = {}
         for prefix, file in data:
@@ -2881,7 +4899,7 @@ class StopCodon_analysis():
     def get_df(self):
         return pd.melt(self.StopCodon_Count_df.reset_index(), id_vars="Stop Codon", value_name="Count", var_name="Group")
         
-    def draw_barplot(self, figsize=None, ax=None, palette="Blues", legend_font_style="italic", legend_font_size=10):
+    def draw_barplot(self, figsize=None, ax=None, palette="Blues", legend_font_style="italic", legend_font_size=10, outfile=None):
         """
         Description 
         ----------
@@ -2894,12 +4912,15 @@ class StopCodon_analysis():
         legend_font_style: {'normal', 'italic', 'oblique'}
         legend_font_size: 10
         ax: {None, Aexs}
+        outfile: A path of outfile.
         """
         df = self.get_df()
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
         sns.barplot(x=df["Stop Codon"], y=df["Count"], hue=df["Group"], hue_order=sorted(set(df["Group"])), palette=palette, ax=ax)
         ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False, shadow=False, title='', prop={'style':legend_font_style, 'size':legend_font_size})
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def draw_clustermap(self, 
@@ -2912,7 +4933,8 @@ class StopCodon_analysis():
                         row_cluster=True,
                         col_cluster=True,
                         show_ylabels=True,
-                        show_xlabels=True):
+                        show_xlabels=True,
+                        outfile=None):
         """
         Description 
         -----------
@@ -2933,6 +4955,7 @@ class StopCodon_analysis():
         xlabels_fontsize: 10
         show_ylabels: {bool}
         show_xlabels: {bool}
+        outfile: A path of outfile.
         """
         df = self.StopCodon_Count_df
         cmp = sns.clustermap(df.T,
@@ -2946,13 +4969,15 @@ class StopCodon_analysis():
         cmp.ax_heatmap.set_yticklabels(cmp.ax_heatmap.get_yticklabels(), fontsize=ylabels_fontsize, fontstyle=ylabels_fontstyle)
         cmp.ax_heatmap.set_xticklabels(cmp.ax_heatmap.get_xticklabels(), fontsize=xlabels_fontsize, fontstyle=xlabels_fontstyle)
         cmp.ax_heatmap.set_xlabel("")
+        if outfile != None:
+            cmp.savefig(outfile, dpi=600)
         return None
     
     def draw_boxplot(self,
-                     figsize = None,
-                     ax = None,
-                     fontstyle = 'italic',
-                     fontsize = 10):
+                     figsize=None,
+                     ax=None,
+                     fontstyle='italic',
+                     fontsize=10, outfile=None):
         """
         Description 
         -----------
@@ -2966,6 +4991,7 @@ class StopCodon_analysis():
              Axes in which to draw the plot, otherwise use the currently-active Axes.
         fontstyle: {'normal', 'italic', 'oblique'}
         fontsize: 10
+        outfile: A path of outfile.
         """
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
@@ -2974,8 +5000,9 @@ class StopCodon_analysis():
         ax.set_yticks(ax.get_yticks())
         ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
         ax.set_xlabel("Count")
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
-    
     
     def draw_PCA_plot(self,
                       figsize=(6,6), 
@@ -2995,7 +5022,8 @@ class StopCodon_analysis():
                       ylabel_size = 12,
                       show_labels = True,
                       show_legend = False,
-                      ax=None):
+                      ax=None, 
+                      outfile=None):
         """
         Description 
         ----------
@@ -3018,6 +5046,7 @@ class StopCodon_analysis():
         xlabel {None, str}
         ylabel {None, str}
         ax: {None, Aexs}
+        outfile: A path of outfile.
         """
         pca = self.pca
         if ax == None:
@@ -3082,6 +5111,8 @@ class StopCodon_analysis():
                       frameon=False,
                       shadow=False,
                       title='')
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def get_shape_and_color(self, length):
@@ -3274,13 +5305,14 @@ class TreePlotter:
     def plot(
         self, 
         figsize=(8,8),
-        ax= None):
+        ax= None, outfile=None):
         """Plot rectangular layout phylogenetic tree
         
         Parameters
         ----------
         ax : matplotlib.axes.Axes, optional
             Existing axes to plot on
+        outfile: A path of outfile.
         Returns
         -------
         matplotlib.figure.Figure
@@ -3327,6 +5359,9 @@ class TreePlotter:
             
         # Set dynamic axis limits
         self._set_axis_limits(ax)
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
         return None
     
     def _set_axis_limits(self, ax):
@@ -3446,5 +5481,247 @@ class TreePlotter:
             # Add label
             ax.text(x_data + length/2, y_data - (y_max-y_min)*0.02, 
                     label, ha='center', va='top', **kwargs)
-                    
         self._plot_funcs.append(_add_scale)
+
+class Sequence_Indices_Analysis():
+    def __init__(self, file, genetic_code, optimal_codons, cai_ref_Obs):
+        """
+        Description
+        ----------
+        Seqence analysis of various indicators, such as GC3s, ENC, CAI, CBI, Fop, GC, etc.
+        
+        Parameters
+        ----------
+        file: a fasta or fasta.gz format file include of CDS seqence.
+        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile function,
+                        or return value from get_optimal_codons_from_ENC() function,
+                        or it can be a preset value from the codonw software, such as {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}
+                        or it can be a custom list containing the best codons.
+        cai_ref_Obs: get_Obs function return value. Observed number of occurrences of codon in a reference set of genes.
+                     Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
+        """
+        tmp = []
+        index = ['A', 'T', 'G', 'C', 'GC', 'AT', 'GC-skew', 'AT-skew',
+                 'A1', 'T1', 'G1', 'C1', 'GC1', 'AT1', 'GC1-skew', 'AT1-skew',
+                 'A2', 'T2', 'G2', 'C2', 'GC2', 'AT2', 'GC2-skew', 'AT2-skew',
+                 'A3', 'T3', 'G3', 'C3', 'GC3', 'AT3', 'GC3-skew', 'AT3-skew', 'GC12',
+                 'A1s', 'T1s', 'G1s', 'C1s', 'GC1s', 'AT1s',
+                 'A2s', 'T2s', 'G2s', 'C2s', 'GC2s', 'AT2s',
+                 'A3s', 'T3s', 'G3s', 'C3s', 'GC3s', 'AT3s', 'GC12s',
+                 'A3s codonW', 'T3s codonW', 'G3s codonW', 'C3s codonW', 'L_sym', 'L_aa',
+                 'Aromaticity', 'Hydropathicity', 'ENC', 'CAI', 'CBI', 'Fop']
+        for name, seq in FastaIO(file):
+            Obs = get_Obs(seq, genetic_code=genetic_code)
+            Indices = get_ATGC_Indices(Obs)
+            Indices["Aromaticity"] = get_Aromo(Obs)
+            Indices["Hydropathicity"] = get_Gravy(Obs)
+            Indices["ENC"] = get_ENC(Obs)
+            Indices["CAI"] = get_CAI(Obs, ref_Obs=cai_ref_Obs)
+            Indices["CBI"] = get_CBI(Obs, optimal_codons=optimal_codons)
+            Indices["Fop"] = get_Fop(Obs, optimal_codons=optimal_codons)
+            tmp.append(pd.DataFrame({name:Indices}, index=index))
+        self.indices_df = pd.concat(tmp, axis=1).T
+        
+    def draw_pearson_heatmap(self,
+                             figsize=None, 
+                             cmap="Blues",
+                             labels_fontstyle='normal',
+                             labels_fontsize=10,
+                             ax=None, 
+                             indices='all',
+                             outfile=None):
+        """
+        Description 
+        -----------
+        Draw pearson heatmap of RSCU.
+        
+        Parameters
+        ----------
+        figsize: tuple of (width, height), optional
+        cmap : matplotlib colormap name or object, or list of colors, optional
+               The mapping from data values to color space. If not provided, the
+               default will depend on whether ``center`` is set.
+        ax : matplotlib Axes, optional 
+             Axes in which to draw the plot, otherwise use the currently-active Axes.
+        labels_fontstyle: {'normal', 'italic', 'oblique'}
+        labels_fontsize: 10
+        outfile: A path of outfile.
+        indices: {"all", list} A indices list, such as ["GC1s", "GC2s", "GC3s", "CAI", "CBI", "Fop", "L_aa", 'Aromaticity', 'Hydropathicity'].
+        """
+        
+        if indices == 'all':
+            df = self.indices_df
+        else:
+            df = self.indices_df.loc[:, indices]
+        if figsize == None:
+            figsize = (df.shape[1]/4+1, df.shape[1]/4)
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        corr = df.corr(method='pearson')
+        mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
+        sns.heatmap(corr, mask=mask, fmt=".2f", cmap="Blues", ax=ax)
+        ax.set_xticklabels(ax.get_xticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        ax.set_yticklabels(ax.get_yticklabels(), fontstyle=labels_fontstyle, fontsize=labels_fontsize)
+        
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_regression_plot(self, 
+                      x_axis,
+                      y_axis,
+                      figsize=(6,4),
+                      show_gene_names=False,
+                      gene_names_size=10,
+                      gene_names_color="#0A0A0A",
+                      point_color="#4F845C",
+                      line_color="#C25759", 
+                      point_size=20,
+                      title=None,
+                      xlabel=None,
+                      ylabel=None, 
+                      ax=None,
+                      outfile=None,
+                     ):
+        """
+        Description
+        ----------
+        Plot data and a linear regression model fit.
+        
+        Parameters
+        ----------
+        x_axis: {str} A sequence indices.
+        y_axis: {str} A sequence indices.
+        figsize: figure size.
+        show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
+        gene_names_size: font size of gene name. 
+        gene_names_color: font color of gene name. 
+        point_color: point color.
+        line_color: strand line color.
+        point_size: point size.
+        title: title of plot.
+        xlabel: xlabel of plot.
+        ylabel: ylabel of plot.
+        ax: {None, Aexs}
+        outfile: A path of outfile.
+        """
+        
+        xs = self.indices_df[x_axis].tolist()
+        ys = self.indices_df[y_axis].tolist()
+        labels = self.indices_df.index.tolist()
+        
+        PearsonRResult = ss.pearsonr(xs, ys)
+        R = PearsonRResult[0]
+        P = PearsonRResult[1]
+        slope, intercept = np.polyfit(xs, ys, 1)
+        
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+            
+        sns.regplot(x=xs, y=ys, 
+                    fit_reg=True,
+                    scatter_kws={"color": point_color, 's': point_size, 'alpha':1}, 
+                    line_kws={"color":line_color, "linewidth": 2}, 
+                    label="Regression Line",
+                    ax=ax)
+        
+        if show_gene_names:
+            for x,y,l in zip(xs, ys, labels):
+                if isinstance(show_gene_names, bool):
+                    ax.text(x, y, l, c=gene_names_color, size=gene_names_size)
+                else:
+                    if l in show_gene_names:
+                        ax.text(x, y, l, c=gene_names_color, size=gene_names_size)
+        if xlabel==None:
+            xlabel = x_axis
+        if ylabel==None:
+            ylabel = y_axis
+        if title == None:
+            title = '$y$ = {:.4f}$x$ + {:.4f}; $R$$^2$ = {:.4f}; $P$ = {:.4f}'.format(slope, intercept, pow(R, 2), P)
+            
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+    
+    def draw_histogram_plot(self, 
+                      x_axis,
+                      figsize=(6,4),
+                      color=None,
+                      title=None,
+                      xlabel=None,
+                      ylabel="Count", 
+                      ax=None,
+                      outfile=None,
+                     ):
+        """
+        Description
+        ----------
+        Draw histogram plot.
+        
+        Parameters
+        ----------
+        x_axis: {str} A sequence indices.
+        figsize: figure size.
+        color: bar color.
+        title: title of plot.
+        xlabel: xlabel of plot.
+        ylabel: ylabel of plot.
+        ax: {None, Aexs}
+        outfile: A path of outfile.
+        """
+        xs = self.indices_df[x_axis].tolist()
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        if xlabel == None:
+            xlabel = x_axis
+        sns.histplot(xs, ax=ax, color=color)
+        ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
+        
+    def draw_density_plot(self, 
+                      x_axis,
+                      figsize=(6,4),
+                      color=None,
+                      title=None,
+                      xlabel=None,
+                      ylabel="Density", 
+                      ax=None,
+                      outfile=None,
+                     ):
+        """
+        Description
+        ----------
+        Draw density plot.
+        
+        Parameters
+        ----------
+        x_axis: {str} A sequence indices.
+        figsize: figure size.
+        color: line color.
+        title: title of plot.
+        xlabel: xlabel of plot.
+        ylabel: ylabel of plot.
+        ax: {None, Aexs}
+        outfile: A path of outfile.
+        """
+        xs = self.indices_df[x_axis].tolist()
+        if ax == None:
+            fig, ax = plt.subplots(figsize=figsize)
+        if xlabel == None:
+            xlabel = x_axis
+        sns.kdeplot(xs, ax=ax, color=color)
+        ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        if outfile != None:
+            fig.savefig(outfile, dpi=600)
+        return None
