@@ -20,9 +20,9 @@ __all__ = ["translate",
            "get_emboss_cutfile_from_Obs", 
            "get_Obs_from_emboss_cutfile",
            "get_Obs_from_CUBE_file",
-           "get_codonw_cai_file_from_Obs",
+           "get_codonw_caifile_from_Obs",
            "get_optimal_codons_from_codonw_coafile",
-           "get_optimal_codons_from_ENC"
+           "get_optimal_codons_from_ENC",
            "draw_codon_barplot", 
            "get_cusp_like",
            "get_codonW_like",
@@ -49,7 +49,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as ss
-from fastaio import FastaIO
+from .fastaio import FastaIO
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch, Rectangle
@@ -57,20 +57,23 @@ from collections import defaultdict
 from skbio import DistanceMatrix
 from skbio.tree import TreeNode, nj, upgma, gme, bme
 from scipy.spatial.distance import pdist, squareform
-from codontables import CodonTables, Seq3toSeq1, CBI_and_Fop_preset, CAI_preset
+from .codontables import CodonTables, Seq3toSeq1, CBI_and_Fop_preset, CAI_preset
 #mpl.rcParams['svg.fonttype'] = 'none'
 #mpl.rcParams['svg.hashsalt'] = 'hello'
 
 def translate(cds, genetic_code):
     """
-    Description 
+    Description
     ----------
-    CDS translate protein.
+    Translate the CDS sequence into a protein sequence.
     
     Parameters
     ----------
-    cds: CDS seqence string.
-    genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+    cds: str
+        A CDS sequence.
+      
+    genetic_code: int
+        A genetic code id, use `pycubs.CodonTables()` for more details.
     """
     
     protein = ""
@@ -83,13 +86,18 @@ def get_Obs(seqences, genetic_code, aaseq3=True):
     """
     Description 
     ----------
-    Calculate Observed number of occurrences of codon.
+    Calculate Observed number of occurrences of codon, and return a dict object.
     
     Parameters
     ----------
-    seqences: {str, list, file path} a seqence string, or a seqences list, or a fasta or fasta.gz format file path.
-    genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
-    aaseq3: if value is True, amino acid three letter code.
+    seqences: str, list
+        A sequence string, or a sequences list, or a fasta or fasta.gz format file path.
+    
+    genetic_code: int
+    	A genetic code id, use `pycubs.CodonTables()` for more details.
+    
+    aaseq3: bool, default=True
+    	If the value is True, the amino acid uses a three-letter code.
     """
     
     codontable = CodonTables().get(genetic_code, aaseq3)
@@ -134,6 +142,518 @@ def get_Obs(seqences, genetic_code, aaseq3=True):
         else:
             Obs.setdefault(AA, {Codon: Codons.get(Codon, 0)})
     return Obs
+
+def get_Fraction(Obs):
+    """
+    Description 
+    ----------
+    Calculate Fraction of codon.
+    Fraction represents the proportion of each codon in the codon encoding the amino acid, i.e.
+    Fraction = the number of occurrences of a codon/the number of occurrences of all codons of the amino acid encoded by the codon.
+    
+    Parameters
+    ----------
+    Obs: dict
+    	get_Obs() function return value.
+    
+    Reference
+    ----------
+    [1] Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
+    [2] Rice, Peter, Ian Longden, and Alan Bleasby. "EMBOSS: the European molecular biology open software suite." Trends in genetics 16.6 (2000): 276-277.
+    """
+    
+    class Fraction():
+        def __init__(self, obj):
+            self.Fraction_dict = obj
+            
+        def draw_barplot(self,
+                         ylabel='Fraction',
+                         title=None,
+                         palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
+                         width=0.9,
+                         remove_stop_codon=True,
+                         figsize=(8,4),
+                         codon_space = 0.16,
+                         ax=None, outfile=None):
+            """
+            Description
+            ----------
+            Draw a codons barplot.
+
+            Parameters
+            ----------
+            figsize: tuple, default=(8,4)
+            	Figure size.
+            
+            ylabel: str, default=None
+            	Y-axis label of figure.
+            
+            title: str, default=None
+            	Title of figure.
+            	
+            width: float, default=0.9
+            	The bar spacing width.
+            	
+            palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
+            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+            
+            remove_stop_codon: bool, default=None
+            	If remove stop codon.
+            
+            ax: matplotlib Axes, default=None
+            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+            
+            codon_space: float, default=0.16
+            	codon spacing.
+            
+            outfile: str, default=None
+            	A path of outfile.
+            """
+            draw_codon_barplot(self.Fraction_dict, ylabel=ylabel, title=title, 
+                               palette=palette, width=width,
+                               remove_stop_codon=remove_stop_codon,
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
+            return None
+    
+        def __str__(self):
+            STR = ""
+            for AA in self.Fraction_dict:
+                STR += AA + ":\n"
+                for codon in self.Fraction_dict[AA]:
+                    STR += f"    {codon}: {self.Fraction_dict[AA][codon]}\n"
+            return STR
+        
+        def __repr__(self):
+            return self.__str__()
+        
+    Fraction_dict = {}
+    for AA in Obs:
+        Fraction_dict.setdefault(AA, {})
+        Total = sum(Obs[AA].values())
+        for Codon in Obs[AA]:
+            if Total == 0:
+                Fraction_dict[AA][Codon] = 0
+            else:
+                Fraction_dict[AA][Codon] = Obs[AA][Codon]/Total
+            
+    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
+                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
+    Fraction_dict_order = {}
+    for aa in aa_order:
+        if aa in Fraction_dict:
+            Fraction_dict_order.setdefault(aa, {codon: Fraction_dict[aa][codon] for codon in sorted(Fraction_dict[aa].keys())})
+    return Fraction(Fraction_dict_order)
+
+def get_Frequency(Obs):
+    """
+    Description
+    ----------
+    Calculate frequency of codon.
+    Frequency indicates the Frequency of the codon occurrence in the total gene codon encoding, 
+    generally expressed as the number of the codon occurrence in 1000 codons.
+    Frequency = the number of the codon occurrence *1000/ the total number of all codons of the gene
+    
+    Parameters
+    ----------
+    Obs: dict
+    	get_Obs() function return value.
+    
+    Reference
+    ----------
+    [1] Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
+    [2] Rice, Peter, Ian Longden, and Alan Bleasby. "EMBOSS: the European molecular biology open software suite." Trends in genetics 16.6 (2000): 276-277.
+    """
+    
+    class Frequency():
+        def __init__(self, obj):
+            self.Frequency_dict = obj
+            
+        def draw_barplot(self,
+                         ylabel='Frequency',
+                         title=None,
+                         palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
+                         width=0.9,
+                         remove_stop_codon=True,
+                         figsize=(8,4),
+                         codon_space=0.16,
+                         ax=None,
+                         outfile=None):
+            """
+            Description
+            ----------
+            Draw a codons barplot.
+
+            Parameters
+            ----------
+            figsize: tuple, default=(8,4)
+            	Figure size.
+            
+            ylabel: str, default=None
+            	Y-axis label of figure.
+            
+            title: str, default=None
+            	Title of figure.
+            	
+            width: float, default=0.9
+            	The bar spacing width.
+            	
+            palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
+            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+            
+            remove_stop_codon: bool, default=None
+            	If remove stop codon.
+            
+            ax: matplotlib Axes, default=None
+            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+            
+            codon_space: float, default=0.16
+            	codon spacing.
+            
+            outfile: str, default=None
+            	A path of outfile.
+            """
+            draw_codon_barplot(self.Frequency_dict, ylabel=ylabel, title=title, 
+                               palette=palette, width=width,
+                               remove_stop_codon=remove_stop_codon,
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
+            return None
+    
+        def __str__(self):
+            STR = ""
+            for AA in self.Frequency_dict:
+                STR += AA + ":\n"
+                for codon in self.Frequency_dict[AA]:
+                    STR += f"    {codon}: {self.Frequency_dict[AA][codon]}\n"
+            return STR
+        
+        def __repr__(self):
+            return self.__str__()
+    
+    Total = sum([sum(Obs[AA].values()) for AA in Obs])
+    Frequency_dict = {}
+    for AA in Obs:
+        Frequency_dict.setdefault(AA, {})
+        for Codon in Obs[AA]:
+            Frequency_dict[AA][Codon] = Obs[AA][Codon]/Total*1000
+            
+    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
+                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
+    Frequency_dict_order = {}
+    for aa in aa_order:
+        if aa in Frequency_dict:
+            Frequency_dict_order.setdefault(aa, {codon: Frequency_dict[aa][codon] for codon in sorted(Frequency_dict[aa].keys())})
+    return Frequency(Frequency_dict_order)
+
+def get_Relative_Adaptiveness(Obs):
+    """
+    Description
+    ----------
+    The relative adaptiveness (w) of each codon is the ratio of the usage of each codon,
+    to that of the most abundant codon for the same amino acid. 
+    
+    Parameters
+    ----------
+    Obs: dict
+    	get_Obs() function return value.
+    
+    Reference
+    ----------
+    [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
+    """
+    class Relative_Adaptiveness():
+        def __init__(self, obj):
+            self.Relative_Adaptiveness_dict = obj
+            
+        def draw_barplot(self,
+                         ylabel='Relative adaptiveness',
+                         title=None,
+                         palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
+                         width=0.9,
+                         remove_stop_codon=True,
+                         figsize=(8,4),
+                         codon_space = 0.16,
+                         ax=None, 
+                         outfile=None):
+            """
+            Description
+            ----------
+            Draw a codons barplot.
+
+            Parameters
+            ----------
+            figsize: tuple, default=(8,4)
+            	Figure size.
+            
+            ylabel: str, default=None
+            	Y-axis label of figure.
+            
+            title: str, default=None
+            	Title of figure.
+            	
+            width: float, default=0.9
+            	The bar spacing width.
+            	
+            palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
+            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+            
+            remove_stop_codon: bool, default=None
+            	If remove stop codon.
+            
+            ax: matplotlib Axes, default=None
+            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+            
+            codon_space: float, default=0.16
+            	codon spacing.
+            
+            outfile: str, default=None
+            	A path of outfile.
+            """
+            draw_codon_barplot(self.Relative_Adaptiveness_dict, ylabel=ylabel, title=title, 
+                               palette=palette, width=width,
+                               remove_stop_codon=remove_stop_codon,
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
+            return None
+    
+        def __str__(self):
+            STR = ""
+            for AA in self.Relative_Adaptiveness_dict:
+                STR += AA + ":\n"
+                for codon in self.Relative_Adaptiveness_dict[AA]:
+                    STR += f"    {codon}: {self.Relative_Adaptiveness_dict[AA][codon]}\n"
+            return STR
+        
+        def __repr__(self):
+            return self.__str__()
+    
+    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
+                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
+
+    Relative_Adaptiveness_dict = {}
+    Fraction = get_Fraction(Obs)
+    for aa in Fraction.Fraction_dict:
+        Relative_Adaptiveness_dict.setdefault(aa, {})
+        max_fraction_per_aa = max(Fraction.Fraction_dict[aa].values())
+        if max_fraction_per_aa!=0:
+            for c in Fraction.Fraction_dict[aa]:
+                Relative_Adaptiveness_dict[aa].setdefault(c, Fraction.Fraction_dict[aa][c] / max_fraction_per_aa)
+        else:
+            for c in Fraction.Fraction_dict[aa]:
+                Relative_Adaptiveness_dict[aa].setdefault(c, 0)
+            
+    Relative_Adaptiveness_dict_order = {}
+    for aa in aa_order:
+        if aa in Relative_Adaptiveness_dict:
+            Relative_Adaptiveness_dict_order.setdefault(aa, {codon: Relative_Adaptiveness_dict[aa][codon] for codon in sorted(Relative_Adaptiveness_dict[aa].keys())})
+    return Relative_Adaptiveness(Relative_Adaptiveness_dict_order)
+
+def get_RSCU(Obs):
+    """
+    Description
+    ----------
+    Calculate relative synonymous codon usage (RSCU).
+    
+    Parameters
+    ----------
+    Obs: dict
+    	get_Obs() function return value.
+    
+    Reference
+    ----------
+    [1] Sharp, Paul M., Therese MF Tuohy, and Krzysztof R. Mosurski. "Codon usage in yeast: cluster analysis clearly differentiates highly 
+    	and lowly expressed genes." Nucleic acids research 14.13 (1986): 5125-5143.
+    """
+    
+    class RSCU():
+        def __init__(self, obj):
+            self.RSCU_dict = obj
+            
+        def draw_barplot(self,
+                         ylabel='RSCU',
+                         title=None,
+                         palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
+                         width=0.9,
+                         remove_stop_codon=True,
+                         figsize=(8,4),
+                         codon_space = 0.16,
+                         ax=None,
+                         outfile=None):
+            """
+            Description
+            ----------
+            Draw a codons barplot.
+
+            Parameters
+            ----------            	
+            figsize: tuple, default=(8,4)
+            	Figure size.
+            
+            ylabel: str, default=None
+            	Y-axis label of figure.
+            
+            title: str, default=None
+            	Title of figure.
+            	
+            width: float, default=0.9
+            	The bar spacing width.
+            	
+            palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
+            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+            
+            remove_stop_codon: bool, default=None
+            	If remove stop codon.
+            
+            ax: matplotlib Axes, default=None
+            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+            
+            codon_space: float, default=0.16
+            	codon spacing.
+            
+            outfile: str, default=None
+            	A path of outfile.
+            """
+            draw_codon_barplot(self.RSCU_dict, ylabel=ylabel, title=title, 
+                               palette=palette, width=width,
+                               remove_stop_codon=remove_stop_codon,
+                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
+            return None
+    
+        def __str__(self):
+            STR = ""
+            for AA in self.RSCU_dict:
+                STR += AA + ":\n"
+                for codon in self.RSCU_dict[AA]:
+                    STR += f"    {codon}: {self.RSCU_dict[AA][codon]}\n"
+            return STR
+        
+        def __repr__(self):
+            return self.__str__()
+    
+    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
+                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
+    
+    RSCU_dict = {}
+    for AA in Obs:
+        RSCU_dict.setdefault(AA, {})
+        Total = sum(Obs[AA].values())
+        n = len(Obs[AA])
+        for Codon in Obs[AA]:
+            if Total == 0:
+                RSCU_dict[AA][Codon] = 0
+            else:
+                RSCU_dict[AA][Codon] = Obs[AA][Codon]*n/Total
+    RSCU_dict_order = {}
+    for aa in aa_order:
+        if aa in RSCU_dict:
+            RSCU_dict_order.setdefault(aa, {codon: RSCU_dict[aa][codon] for codon in sorted(RSCU_dict[aa].keys())})
+    return RSCU(RSCU_dict_order)
+
+def draw_codon_barplot(obj, 
+                       ylabel=None,
+                       title=None,
+                       palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
+                       width=0.9,
+                       remove_stop_codon=True,
+                       figsize=(8,4),
+                       codon_space=0.16,
+                       ax=None,
+                       outfile=None):
+    """
+    Description
+    ----------
+    Draw a codons barplot.
+
+    Parameters
+    ----------
+    obj: dict, RSCU, Fraction, Frequency, Relative_Adaptiveness
+        Return value of get_Obs(), get_Fraction(), get_Frequency(), get_RSCU() or get_Relative_Adaptiveness() function.
+        
+    figsize: tuple, default=(8,4)
+        Figure size.
+    
+    ylabel: str, default=None
+        Y-axis label of figure.
+    
+    title: str, default=None
+        Title of figure.
+        
+    width: float, default=0.9
+        The bar spacing width.
+        
+    palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
+        Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+        Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+    
+    remove_stop_codon: bool, default=None
+        If remove stop codon.
+    
+    ax: matplotlib Axes, default=None
+        Axes object to draw the plot onto, otherwise uses the current Axes.   
+    
+    codon_space: float, default=0.16
+        codon spacing.
+    
+    outfile: str, default=None
+        A path of outfile.
+    """
+    
+    if isinstance(obj, dict):
+        obj = obj.copy()
+    else:
+        if "RSCU_dict" in list(dir(obj)):
+            obj = obj.RSCU_dict.copy()
+            if ylabel == None:
+                ylabel = "RSCU"
+        if "Fraction_dict" in list(dir(obj)):
+            obj = obj.Fraction_dict.copy()
+            if ylabel == None:
+                ylabel = "Fraction"
+        if "Frequency_dict" in list(dir(obj)):
+            obj = obj.Frequency_dict.copy()
+            if ylabel == None:
+                ylabel = "Frequency"
+        if "Relative_Adaptiveness_dict" in list(dir(obj)):
+            obj = obj.Relative_Adaptiveness_dict.copy()
+            if ylabel == None:
+                ylabel = "Relative adaptiveness"
+    
+    if remove_stop_codon:
+        if "*" in obj:
+            del obj['*']
+    
+    if ax == None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    if isinstance(palette, str):
+        cols = plt.colormaps.get_cmap(palette).colors
+    else:
+        cols = palette
+    
+    cex = max([sum(obj[AA].values()) for AA in obj])*codon_space
+    for AA in obj:
+        value = 0
+        values = []
+        colors = []
+        codons = []
+        for codon, color in zip(obj[AA], cols):
+            value += obj[AA][codon]
+            values.append(value)
+            colors.append(color)
+            codons.append(codon)
+            
+        for y, codon, value, color in zip(reversed(range(len(codons))), reversed(codons), reversed(values), reversed(colors)):
+            ax.bar(AA, value, width, label=AA, fc=color)
+            ax.text(x=AA, y=(-y*cex-2.2*cex)/3, ha="center", va="center", s=codon, fontdict=dict(fontsize=8, color='black', family='monospace'),
+                     bbox={'facecolor': color, 'edgecolor':color, 'pad':1})      
+    ax.margins(x=0.01)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    if outfile != None:
+        fig.savefig(outfile, dpi=600)
+    return None
 
 def get_ATGC_Indices(Obs):
     """
@@ -196,7 +716,10 @@ def get_ATGC_Indices(Obs):
     L_sym: Number of silent sites
     L_aa: Number of amino acids
     
-    The following four indices have codow definitions, It quantifies the usage of each nucleotide at synonymous third codon positions as a proportion of the maximum usage of that nucleotide could have without altering the amino acid composition. 
+    The following four indices have codow definitions, It quantifies the usage 
+    of each nucleotide at synonymous third codon positions as a proportion 
+    of the maximum usage of that nucleotide could have without altering the amino acid composition.
+    
     A3s codonW: A3s with codonW definition
     T3s codonW: T3s with codonW definition
     G3s codonW: G3s with codonW definition
@@ -204,7 +727,8 @@ def get_ATGC_Indices(Obs):
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
+    Obs: dict
+    	get_Obs() function return value.
     """
     ATGC1 = defaultdict(int)
     ATGC2 = defaultdict(int)
@@ -352,12 +876,19 @@ def get_codonw_caifile_from_Obs(Obs, outfile=None):
     """
     Description
     ----------
-    To create a condow cai file from the get_Obs return value of the constructed high expression gene.
+    A set of high expression genes set calculation of Obs, converted to condow software recognition of the cai file.
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
-    outfile: A path of outfile.
+    Obs: dict
+    	get_Obs() function return value.
+    	
+    outfile: str, default=None
+        A path of outfile.
+        
+    Reference
+    ----------
+    [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
     
     RA = get_Relative_Adaptiveness(Obs)
@@ -385,12 +916,20 @@ def get_emboss_cutfile_from_Obs(Obs, outfile=None):
     """
     Description
     ----------
-    To create a emboss cutfile from the get_Obs return value of the constructed high expression gene.
+    To create a emboss cutfile from the get_Obs() function return value.
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
-    outfile: A path of outfile.
+    Obs: dict
+    	get_Obs() function return value.
+    	
+    outfile: str, default=None
+        A path of outfile.
+    
+    Reference
+    ----------
+    [1] Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
+    [2] Rice, Peter, Ian Longden, and Alan Bleasby. "EMBOSS: the European molecular biology open software suite." Trends in genetics 16.6 (2000): 276-277.
     """
     
     Frequency = get_Frequency(Obs)
@@ -419,13 +958,22 @@ def get_Obs_from_emboss_cutfile(file, aaseq3=True):
     """
     Description
     ----------
-    Gets the Obs object from the emboss cut file with the same value as the get_Obs function returns.
+    Gets the Obs object from the emboss cut file with the same value as the get_Obs() function returns.
     
     Parameters
     ----------
-    file : a emboss cut file.
-    aaseq3: if value is True, amino acid three letter code.
+    file: str
+    	A emboss cut file.
+    
+    aaseq3: bool, default=True
+    	If the value is True, the amino acid uses a three-letter code.
+    	
+    Reference
+    ----------
+    [1] Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
+    [2] Rice, Peter, Ian Longden, and Alan Bleasby. "EMBOSS: the European molecular biology open software suite." Trends in genetics 16.6 (2000): 276-277.
     """
+    
     Seq1toSeq3 = {Seq3toSeq1[k]:k for k in Seq3toSeq1}
     Obs = {}
     with open(file, 'r') as f:
@@ -447,13 +995,17 @@ def get_Obs_from_CUBE_file(file, aaseq3=True):
     """
     Description
     ----------
-    Gets the Obs object from the CUBE (https://www.codonbias.cn/) file with the same value as the get_Obs function returns.
+    Gets the Obs object from the CUBE (https://www.codonbias.cn/) file with the same value as the get_Obs() function returns.
     
     Parameters
     ----------
-    file : A CUBE file from https://www.codonbias.cn/download
-    aaseq3: If value is True, amino acid three letter code.
+    file: str
+    	A CUBE file from https://www.codonbias.cn/download
+    
+    aaseq3: bool, default=True
+    	If the value is True, the amino acid uses a three-letter code.
     """
+    
     Seq1toSeq3 = {Seq3toSeq1[k]:k for k in Seq3toSeq1}
     Obs = {}
     with open(file, 'r') as f:
@@ -484,16 +1036,18 @@ def get_optimal_codons_from_codonw_coafile(file):
     """
     Description 
     ----------
-    Obtain a list of optimal codons from the cbi.coa or fop.coa file generated by the codonw software for downstream get_CBI and get_Fop analysis.
-
+    Obtain a list of optimal codons from the cbi.coa or fop.coa file generated by the codonw software as downstream get_CBI() and get_Fop() function input.
+    
     Parameters
     ----------
-    file: {cbi.coa, fop.coa} The file  include of optimal codons generated by codonw software.
+    file: str
+    	The file include of optimal codons generated by codonw software. such as cbi.coa, and fop.coa.
     
     Reference
     ----------
     [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
+    
     a1 = []
     with open(file, 'r') as f:
         for l in f:
@@ -518,11 +1072,21 @@ def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_
     
     Parameters
     ----------
-    file: A fasta or fasta.gz format file path.
-    genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
-    ratio: {0-1}, How many sequences were selected from the genes with high and low ENC values to establish low and high bias gene groups.
-    rscu: default=1, Lower limit of RSCU in low ENC group.
-    delta_rscu: delta_rscu=0.08, delta RSCU = RSCU in low ENC group - RSCU in high ENC group.
+    file: str
+    	A fasta or fasta.gz format file path.
+    
+    genetic_code: int
+    	A genetic code id, use `pycubs.CodonTables()` for more details.
+    
+    ratio: float, default=0.1
+    	How many sequences were selected from the genes with high and low ENC values to establish low and high bias gene groups. 
+    	The range of values is 0-1.
+    	
+    rscu: float, default=1
+    	Lower limit of RSCU in low ENC group. The range of values is 0-6.
+    	
+    delta_rscu: float, default=0.08
+    	Delta RSCU = RSCU in low ENC group - RSCU in high ENC group
     
     Reference
     ----------
@@ -581,24 +1145,32 @@ def get_Fop(Obs, optimal_codons="Escherichia coli"):
     """
     Description 
     ----------
-    Frequency of Optimal codons (Fop) (Ikemura 1981). 
-    This index, is the ratio of optimal codons to synonymous codons (genetic 
-    code dependent). Optimal codons for several species are in-built.
+    Frequency of Optimal codons (Fop).
+    This index, is the ratio of optimal codons to synonymous codons (genetic code dependent).
+    Optimal codons for several species are in-built. 
     By default, the optimal codons of E. coli are assumed.
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
-    optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile function,
-                    or return value from get_optimal_codons_from_ENC() function,
-                    or it can be a preset value from the codonw software, such as {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}
-                    or it can be a custom list containing the best codons.
+    Obs: dict
+    	get_Obs() function return value.
+    
+    optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
+    	It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+    	or return value from get_optimal_codons_from_ENC() function,
+    	or it can be a custom list containing the best codons,
+    	or it can be a preset value from the codonw software, such as "Escherichia coli",
+    	"Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+    	"Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+        
     Reference
     ----------
-    [1] Ikemura, Toshimichi. "Correlation between the abundance of Escherichia coli transfer RNAs and the occurrence of the respective codons in its protein genes." Journal of molecular biology 146.1 (1981): 1-21.
+    [1] Ikemura, Toshimichi. "Correlation between the abundance of Escherichia coli transfer RNAs 
+        and the occurrence of the respective codons in its protein genes."                      
+        Journal of molecular biology 146.1 (1981): 1-21.
     [2] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
-
+    
     if isinstance(optimal_codons, str):
         if optimal_codons in CBI_and_Fop_preset:
             optimal_codons = CBI_and_Fop_preset[optimal_codons][1]
@@ -641,19 +1213,24 @@ def get_CBI(Obs, optimal_codons="Escherichia coli"):
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
-    optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile() function,
-                    or return value from get_optimal_codons_from_ENC() function,
-                    or it can be a preset value from the codonw software, such as {"Escherichia coli", 
-                    "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans",
-                    "Saccharomyces cerevisiae", "Drosophila melanogaster",
-                    "Caenorhabditis elegans", "Neurospora crassa"}
-                    or it can be a custom list containing the best codons.
+    Obs: dict
+    	get_Obs() function return value.
+    
+    optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
+    	It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+    	or return value from get_optimal_codons_from_ENC() function,
+    	or it can be a custom list containing the best codons,
+    	or it can be a preset value from the codonw software, such as "Escherichia coli",
+    	"Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+    	"Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+                     
     Reference
     ----------
-    [1] Bennetzen, Jeffrey L., and Benjamin D. Hall. "Codon selection in yeast." Journal of Biological Chemistry 257.6 (1982): 3026-3031.
+    [1] Bennetzen, Jeffrey L., and Benjamin D. Hall. "Codon selection in yeast."
+        Journal of Biological Chemistry 257.6 (1982): 3026-3031.
     [2] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
+    
     if isinstance(optimal_codons, str):
         if optimal_codons in CBI_and_Fop_preset:
             optimal_codons = CBI_and_Fop_preset[optimal_codons][1]
@@ -686,108 +1263,35 @@ def get_CBI(Obs, optimal_codons="Escherichia coli"):
     CBI = (Nopt - Nran) / (Ntot - Nran)
     return CBI
 
-def get_Relative_Adaptiveness(Obs):
+
+def get_CAI(Obs, ref_Obs="Escherichia coli", model="codonw", genetic_code=None):
     """
     Description
-    ----------
-    Relative adaptiveness (w) from codonW (by John Peden).
-    
-    Parameters
-    ----------
-    Obs: get_Obs function return value.
-    
-    Reference
-    ----------
-    [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
-    """
-    class Relative_Adaptiveness():
-        def __init__(self, obj):
-            self.Relative_Adaptiveness_dict = obj
-            
-        def draw_barplot(self,
-                         ylabel='Relative adaptiveness',
-                         title=None,
-                         color_preset=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
-                         width=0.9,
-                         remove_stop_codon=True,
-                         figsize=(8,4),
-                         codon_space = 0.16,
-                         ax=None, 
-                         outfile=None):
-            """
-            Description
-            ----------
-            Draw a codons barplot.
-
-            Parameters
-            ----------
-            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
-            figsize: (8,4)
-            ylabel: ylabel of plot.
-            title: title of plot.
-            width: bar spacing width. default=0.9
-            color_preset: ["Set1", "Set2", "Set3", "tab10", "tab20", "tab20b", "tab20c", "Dark2"]
-            remove_stop_codon: {bool} remove stop codon.
-            ax: {None, Aexs}
-            codon_space: {0-1} codon spacing.
-            outfile: A path of outfile.
-            """
-            draw_codon_barplot(self.Relative_Adaptiveness_dict, ylabel=ylabel, title=title, 
-                               color_preset=color_preset, width=width,
-                               remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
-            return None
-    
-        def __str__(self):
-            STR = ""
-            for AA in self.Relative_Adaptiveness_dict:
-                STR += AA + ":\n"
-                for codon in self.Relative_Adaptiveness_dict[AA]:
-                    STR += f"    {codon}: {self.Relative_Adaptiveness_dict[AA][codon]}\n"
-            return STR
-        
-        def __repr__(self):
-            return self.__str__()
-    
-    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
-                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
-
-    Relative_Adaptiveness_dict = {}
-    Fraction = get_Fraction(Obs)
-    for aa in Fraction.Fraction_dict:
-        Relative_Adaptiveness_dict.setdefault(aa, {})
-        max_fraction_per_aa = max(Fraction.Fraction_dict[aa].values())
-        if max_fraction_per_aa!=0:
-            for c in Fraction.Fraction_dict[aa]:
-                Relative_Adaptiveness_dict[aa].setdefault(c, Fraction.Fraction_dict[aa][c] / max_fraction_per_aa)
-        else:
-            for c in Fraction.Fraction_dict[aa]:
-                Relative_Adaptiveness_dict[aa].setdefault(c, 0)
-            
-    Relative_Adaptiveness_dict_order = {}
-    for aa in aa_order:
-        if aa in Relative_Adaptiveness_dict:
-            Relative_Adaptiveness_dict_order.setdefault(aa, {codon: Relative_Adaptiveness_dict[aa][codon] for codon in sorted(Relative_Adaptiveness_dict[aa].keys())})
-    return Relative_Adaptiveness(Relative_Adaptiveness_dict_order)
-
-def get_CAI(Obs, ref_Obs, model="codonw", genetic_code=None):
-    """
-    Description 
     ----------
     Codon Adaptation Index (CAI). 
     CAI is a measurement of the relative adaptiveness of the codon usage of a gene towards the codon usage of highly expressed genes. 
     
     Parameters
     ----------
-    Obs : get_Obs function return value. Observed number of occurrences of codon in a query gene.
-    ref_Obs : get_Obs function return value. Observed number of occurrences of codon in a reference set of genes.
-              Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
-    model : {emboss, codonw} if model==emboss, Non-synonymous codons and termination codons (dependent on genetic code) are unexcluded. 
-                             if model==codonw, Non-synonymous codons and termination codons (dependent on genetic code) are excluded. 
+    Obs: dict
+    	get_Obs() function return value. 
+    	Observed number of occurrences of codon in a query gene.
+    
+    ref_Obs: str, dict, default="Escherichia coli"
+    	get_Obs() function return value.
+    	Observed number of occurrences of codon in a reference set of genes.
+        Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
+    
+    model: str, default="codonw",
+    	If model==emboss, Non-synonymous codons and termination codons (dependent on genetic code) are unexcluded. 
+        If model==codonw, Non-synonymous codons and termination codons (dependent on genetic code) are excluded. 
+    
     References
     ----------
-    [1] Sharp, Paul M., and Wen-Hsiung Li. "The codon adaptation index-a measure of directional synonymous codon usage bias, and its potential applications." Nucleic acids research 15.3 (1987): 1281-1295.
+    [1] Sharp, Paul M., and Wen-Hsiung Li. "The codon adaptation index-a measure of directional synonymous codon usage bias,
+    	and its potential applications." Nucleic acids research 15.3 (1987): 1281-1295.
     """
+    
     if isinstance(ref_Obs, str):
         Relative_Adaptiveness = CAI_preset[ref_Obs][1]
     elif isinstance(ref_Obs, dict):
@@ -826,13 +1330,16 @@ def get_Gravy(Obs):
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
+    Obs: dict
+    	get_Obs() function return value. 
     
     Reference
     ----------
-    [1] Kyte, Jack, and Russell F. Doolittle. "A simple method for displaying the hydropathic character of a protein." Journal of molecular biology 157.1 (1982): 105-132.
+    [1] Kyte, Jack, and Russell F. Doolittle. "A simple method for displaying the hydropathic character of a protein."
+    	Journal of molecular biology 157.1 (1982): 105-132.
     [2] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
+    
     hydropathy_index = {'Ala': 1.8, 'Arg': -4.5, 'Asn': -3.5, 'Asp': -3.5, 'Cys': 2.5, 'Gln': -3.5, 'Glu': -3.5, 'Gly': -0.4, 'His': -3.2, 'Ile': 4.5, 
                         'Leu': 3.8, 'Lys': -3.9, 'Met': 1.9, 'Phe': 2.8, 'Pro': -1.6, 'Ser': -0.8, 'Thr': -0.7, 'Trp': -0.9, 'Tyr': -1.3, 'Val': 4.2, 
                         'A': 1.8, 'R': -4.5, 'N': -3.5, 'D': -3.5, 'C': 2.5, 'Q': -3.5, 'E': -3.5, 'G': -0.4, 'H': -3.2, 'I': 4.5,
@@ -854,12 +1361,14 @@ def get_Aromo(Obs):
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
+    Obs: dict
+    	get_Obs() function return value. 
     
     Reference
     ----------
     [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
+    
     aromatic_aa_num = 0
     aromatic_aas= ["Phe", "Tyr", "Trp", "F", "Y", "W"]
     for aromatic_aa in aromatic_aas:
@@ -868,338 +1377,6 @@ def get_Aromo(Obs):
     aa_num = sum([sum(Obs[aa].values()) for aa in Obs if aa != "*"])
     return aromatic_aa_num / aa_num
 
-def get_RSCU(Obs):
-    """
-    Description
-    ----------
-    Calculate relative synonymous codon usage (RSCU).
-    
-    Parameters
-    ----------
-    Obs: get_Obs function return value.
-    
-    Reference
-    ----------
-    [1] Sharp, Paul M., Therese MF Tuohy, and Krzysztof R. Mosurski. "Codon usage in yeast: cluster analysis clearly differentiates highly and lowly expressed genes." Nucleic acids research 14.13 (1986): 5125-5143.
-    """
-    
-    class RSCU():
-        def __init__(self, obj):
-            self.RSCU_dict = obj
-            
-        def draw_barplot(self,
-                         ylabel='RSCU',
-                         title=None,
-                         color_preset=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
-                         width=0.9,
-                         remove_stop_codon=True,
-                         figsize=(8,4),
-                         codon_space = 0.16,
-                         ax=None,
-                         outfile=None):
-            """
-            Description
-            ----------
-            Draw a codons barplot.
-
-            Parameters
-            ----------
-            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
-            figsize: (8,4)
-            ylabel: ylabel of plot.
-            title: title of plot.
-            width: bar spacing width. default=0.9
-            color_preset: ["Set1", "Set2", "Set3", "tab10", "tab20", "tab20b", "tab20c", "Dark2"]
-            remove_stop_codon: {bool} remove stop codon.
-            ax: {None, Aexs}
-            codon_space: {0-1} codon spacing.
-            outfile: A path of outfile.
-            """
-            draw_codon_barplot(self.RSCU_dict, ylabel=ylabel, title=title, 
-                               color_preset=color_preset, width=width,
-                               remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
-            return None
-    
-        def __str__(self):
-            STR = ""
-            for AA in self.RSCU_dict:
-                STR += AA + ":\n"
-                for codon in self.RSCU_dict[AA]:
-                    STR += f"    {codon}: {self.RSCU_dict[AA][codon]}\n"
-            return STR
-        
-        def __repr__(self):
-            return self.__str__()
-    
-    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
-                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
-    
-    RSCU_dict = {}
-    for AA in Obs:
-        RSCU_dict.setdefault(AA, {})
-        Total = sum(Obs[AA].values())
-        n = len(Obs[AA])
-        for Codon in Obs[AA]:
-            if Total == 0:
-                RSCU_dict[AA][Codon] = 0
-            else:
-                RSCU_dict[AA][Codon] = Obs[AA][Codon]*n/Total
-    RSCU_dict_order = {}
-    for aa in aa_order:
-        if aa in RSCU_dict:
-            RSCU_dict_order.setdefault(aa, {codon: RSCU_dict[aa][codon] for codon in sorted(RSCU_dict[aa].keys())})
-    return RSCU(RSCU_dict_order)
-
-def get_Fraction(Obs):
-    """
-    Description 
-    ----------
-    Calculate Fraction of codon.
-    Fraction represents the proportion of each codon in the codon encoding the amino acid, i.e.
-    Fraction = the number of occurrences of a codon/the number of occurrences of all codons of the amino acid encoded by the codon.
-    
-    Parameters
-    ----------
-    Obs: get_Obs function return value.
-    
-    Note
-    ----------
-    Cusp software is consistent with the calculated results
-    Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
-    """
-    
-    class Fraction():
-        def __init__(self, obj):
-            self.Fraction_dict = obj
-            
-        def draw_barplot(self,
-                         ylabel='Fraction',
-                         title=None,
-                         color_preset=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
-                         width=0.9,
-                         remove_stop_codon=True,
-                         figsize=(8,4),
-                         codon_space = 0.16,
-                         ax=None, outfile=None):
-            """
-            Description
-            ----------
-            Draw a codons barplot.
-
-            Parameters
-            ----------
-            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
-            figsize: (8,4)
-            ylabel: ylabel of plot.
-            title: title of plot.
-            width: bar spacing width. default=0.9
-            color_preset: ["Set1", "Set2", "Set3", "tab10", "tab20", "tab20b", "tab20c", "Dark2"]
-            remove_stop_codon: {bool} remove stop codon.
-            ax: {None, Aexs}
-            codon_space: {0-1} codon spacing.
-            outfile: A path of outfile.
-            """
-            draw_codon_barplot(self.Fraction_dict, ylabel=ylabel, title=title, 
-                               color_preset=color_preset, width=width,
-                               remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
-            return None
-    
-        def __str__(self):
-            STR = ""
-            for AA in self.Fraction_dict:
-                STR += AA + ":\n"
-                for codon in self.Fraction_dict[AA]:
-                    STR += f"    {codon}: {self.Fraction_dict[AA][codon]}\n"
-            return STR
-        
-        def __repr__(self):
-            return self.__str__()
-        
-    Fraction_dict = {}
-    for AA in Obs:
-        Fraction_dict.setdefault(AA, {})
-        Total = sum(Obs[AA].values())
-        for Codon in Obs[AA]:
-            if Total == 0:
-                Fraction_dict[AA][Codon] = 0
-            else:
-                Fraction_dict[AA][Codon] = Obs[AA][Codon]/Total
-            
-    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
-                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
-    Fraction_dict_order = {}
-    for aa in aa_order:
-        if aa in Fraction_dict:
-            Fraction_dict_order.setdefault(aa, {codon: Fraction_dict[aa][codon] for codon in sorted(Fraction_dict[aa].keys())})
-    return Fraction(Fraction_dict_order)
-
-def get_Frequency(Obs):
-    """
-    Description
-    ----------
-    Calculate frequency of codon.
-    Frequency indicates the Frequency of the codon occurrence in the total gene codon encoding, 
-    generally expressed as the number of the codon occurrence in 1000 codons.
-    Frequency = the number of the codon occurrence *1000/ the total number of all codons of the gene
-    
-    Parameters
-    ----------
-    Obs: get_Obs function return value.
-    
-    Note
-    ----------
-    Cusp software is consistent with the calculated results
-    Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
-    """
-    
-    class Frequency():
-        def __init__(self, obj):
-            self.Frequency_dict = obj
-            
-        def draw_barplot(self,
-                         ylabel='Frequency',
-                         title=None,
-                         color_preset=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
-                         width=0.9,
-                         remove_stop_codon=True,
-                         figsize=(8,4),
-                         codon_space=0.16,
-                         ax=None,
-                         outfile=None):
-            """
-            Description
-            ----------
-            Draw a codons barplot.
-
-            Parameters
-            ----------
-            obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
-            figsize: (8,4)
-            ylabel: ylabel of plot.
-            title: title of plot.
-            width: bar spacing width. default=0.9
-            color_preset: ["Set1", "Set2", "Set3", "tab10", "tab20", "tab20b", "tab20c", "Dark2"]
-            remove_stop_codon: {bool} remove stop codon.
-            ax: {None, Aexs}
-            codon_space: {0-1} codon spacing.
-            outfile: A path of outfile.
-            """
-            draw_codon_barplot(self.Frequency_dict, ylabel=ylabel, title=title, 
-                               color_preset=color_preset, width=width,
-                               remove_stop_codon=remove_stop_codon,
-                               figsize=figsize, ax=ax, codon_space=codon_space, outfile=outfile)
-            return None
-    
-        def __str__(self):
-            STR = ""
-            for AA in self.Frequency_dict:
-                STR += AA + ":\n"
-                for codon in self.Frequency_dict[AA]:
-                    STR += f"    {codon}: {self.Frequency_dict[AA][codon]}\n"
-            return STR
-        
-        def __repr__(self):
-            return self.__str__()
-    
-    Total = sum([sum(Obs[AA].values()) for AA in Obs])
-    Frequency_dict = {}
-    for AA in Obs:
-        Frequency_dict.setdefault(AA, {})
-        for Codon in Obs[AA]:
-            Frequency_dict[AA][Codon] = Obs[AA][Codon]/Total*1000
-            
-    aa_order = ['Ala', 'Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 
-                'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', '*']
-    Frequency_dict_order = {}
-    for aa in aa_order:
-        if aa in Frequency_dict:
-            Frequency_dict_order.setdefault(aa, {codon: Frequency_dict[aa][codon] for codon in sorted(Frequency_dict[aa].keys())})
-    return Frequency(Frequency_dict_order)
-
-def draw_codon_barplot(obj, 
-                       ylabel=None,
-                       title=None,
-                       color_preset=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
-                       width=0.9,
-                       remove_stop_codon=True,
-                       figsize=(8,4),
-                       codon_space=0.16,
-                       ax=None,
-                       outfile=None):
-    """
-    Description
-    ----------
-    Draw a codons barplot.
-    
-    Parameters
-    ----------
-    obj: return value of get_Obs, get_Fraction, get_Frequency, get_RSCU or get_Relative_Adaptiveness function.
-    figsize: (8,4)
-    ylabel: ylabel of plot.
-    title: title of plot.
-    width: bar spacing width. default=0.9
-    color_preset: ["Set1", "Set2", "Set3", "tab10", "tab20", "tab20b", "tab20c", "Dark2"]
-    remove_stop_codon: {bool} remove stop codon.
-    ax: {None, Aexs}
-    outfile: A path of outfile.
-    """
-    
-    if isinstance(obj, dict):
-        obj = obj.copy()
-    else:
-        if "RSCU_dict" in list(dir(obj)):
-            obj = obj.RSCU_dict.copy()
-            if ylabel == None:
-                ylabel = "RSCU"
-        if "Fraction_dict" in list(dir(obj)):
-            obj = obj.Fraction_dict.copy()
-            if ylabel == None:
-                ylabel = "Fraction"
-        if "Frequency_dict" in list(dir(obj)):
-            obj = obj.Frequency_dict.copy()
-            if ylabel == None:
-                ylabel = "Frequency"
-        if "Relative_Adaptiveness_dict" in list(dir(obj)):
-            obj = obj.Relative_Adaptiveness_dict.copy()
-            if ylabel == None:
-                ylabel = "Relative adaptiveness"
-    
-    if remove_stop_codon:
-        if "*" in obj:
-            del obj['*']
-    
-    if ax == None:
-        fig, ax = plt.subplots(figsize=figsize)
-    
-    if isinstance(color_preset, str):
-        cols = plt.colormaps.get_cmap(color_preset).colors
-    else:
-        cols = color_preset
-    
-    cex = max([sum(obj[AA].values()) for AA in obj])*codon_space
-    for AA in obj:
-        value = 0
-        values = []
-        colors = []
-        codons = []
-        for codon, color in zip(obj[AA], cols):
-            value += obj[AA][codon]
-            values.append(value)
-            colors.append(color)
-            codons.append(codon)
-            
-        for y, codon, value, color in zip(reversed(range(len(codons))), reversed(codons), reversed(values), reversed(colors)):
-            ax.bar(AA, value, width, label=AA, fc=color)
-            ax.text(x=AA, y=(-y*cex-2.2*cex)/3, ha="center", va="center", s=codon, fontdict=dict(fontsize=8, color='black', family='monospace'),
-                     bbox={'facecolor': color, 'edgecolor':color, 'pad':1})        
-    ax.margins(x=0.01)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    if outfile != None:
-        fig.savefig(outfile, dpi=600)
-    return None
 
 def get_cusp_like(Obs, human_format=False, outfile=None):
     """
@@ -1209,14 +1386,21 @@ def get_cusp_like(Obs, human_format=False, outfile=None):
     
     Parameters
     ----------  
-    Obs: get_Obs function return value.
-    human_format: {bool} if value is True, return human readable format.
-    outfile: A path of outfile. 
+    Obs: dict
+    	get_Obs() function return value.
+    	
+    human_format: bool, default=False
+    	If value is True, return human readable format.
+    
+    outfile: str, default=None
+    	A path of outfile.
     
     Reference
     ----------
-    Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
+    [1] Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
+    [2] Rice, Peter, Ian Longden, and Alan Bleasby. "EMBOSS: the European molecular biology open software suite." Trends in genetics 16.6 (2000): 276-277.
     """
+    
     res = get_ATGC_Indices(Obs)
     GC, GC1, GC2, GC3 = res["GC"], res["GC1"], res["GC2"], res["GC3"]
     Fraction = get_Fraction(Obs)
@@ -1262,14 +1446,27 @@ def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optima
     
     Parameters
     ----------
-    file: A fasta or fasta.gz format file path.
-    genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
-    cai_ref_Obs: get_Obs function return value. Observed number of occurrences of codon in a reference set of genes.
-                 Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
-    optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile function,
-                    or it can be a preset value from the codonw software, such as {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}
-                    or it can be a custom list containing the best codons.
-    outfile: A path of outfile. 
+    file: str
+    	A fasta or fasta.gz format file path.
+    	
+    genetic_code: int
+    	A genetic code id, use `pycubs.CodonTables()` for more details.
+    	
+    cai_ref_Obs: str, dict, default="Escherichia coli"
+    	get_Obs() function return value.
+    	Observed number of occurrences of codon in a reference set of genes.
+        Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
+        
+    optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
+    	It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+    	or return value from get_optimal_codons_from_ENC() function,
+    	or it can be a custom list containing the best codons,
+    	or it can be a preset value from the codonw software, such as "Escherichia coli",
+    	"Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+    	"Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+    	
+    outfile: str, default=None
+    	A path of outfile.
     
     Reference
     ----------
@@ -1318,9 +1515,12 @@ def get_base_phase_synonymous(Obs, base=["A", "T", "G", "C"][2], phase=[0,1,2][2
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
-    base: {A, T, G, C} Four base types.
-    phase: {0, 1, 2} Codon phase, starting at 0.
+    Obs: dict
+    	get_Obs() function return value.
+    base: {A, T, G, C}, default="G"
+    	Four base types.
+    phase: {0, 1, 2}, default=2
+    	Codon phase, starting at 0.
     
     Example
     ----------
@@ -1356,11 +1556,12 @@ def get_ENC(Obs):
     """
     Description
     ----------
-    The effective number of codons (NC).
+    The effective number of codons (ENC).
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
+    Obs: dict
+    	get_Obs() function return value.
     
     Reference
     ----------
@@ -1441,7 +1642,8 @@ def find_four_codon_AA(Obs):
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
+    Obs: dict
+    	get_Obs() function return value.
     """
     
     four_codon_AA = {}
@@ -1462,16 +1664,19 @@ def get_PR2(Obs):
     """
     Description:
     ----------
-    Parity rule 2 (PR2) analysis.
+    get Parity rule 2 (PR2) analysis X-axis and Y-axis.
     
     Parameters
     ----------
-    Obs: get_Obs function return value.
+    Obs: dict
+    	get_Obs() function return value.
         
     Reference
     ----------
-    [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
-    [2] Nasrullah, Izza, et al. "Genomic analysis of codon usage shows influence of mutation pressure, natural selection, and host features on Marburg virus evolution." BMC evolutionary biology 15 (2015): 1-15.
+    [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause
+        of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
+    [2] Nasrullah, Izza, et al. "Genomic analysis of codon usage shows influence of mutation pressure, 
+        natural selection, and host features on Marburg virus evolution." BMC evolutionary biology 15 (2015): 1-15.
     """
     
     four_codon_AA = find_four_codon_AA(Obs)
@@ -1508,17 +1713,22 @@ def get_PR2(Obs):
 
 class NPA_Analysis():
     def __init__(self, file, genetic_code, sym=True):
-        """
+    	"""
         Description
         ----------
         Neutral plot analysis.
         
         Parameters
         ----------
-        file: a fasta or fasta.gz format file include of CDS seqence.
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
-        sym: {bool} only synonymous codons model,
-             if the value is True, amino acids without synonymous codons and stop codons are deleted.
+        file: str
+            A fasta or fasta.gz format file include of CDS seqence.
+    	
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        sym: bool, default=True
+            Only synonymous codons model,
+            If the value is True, amino acids without synonymous codons and stop codons are deleted.
         """
         
         GC1 = []
@@ -1577,13 +1787,13 @@ class NPA_Analysis():
             return df
         
     def draw_NPA_plot(self, 
+    		      figsize=(6,4),
                       show_gene_names=False,
-                      figsize=(6,4),
                       gene_names_size=10,
                       gene_names_color="#0A0A0A",
                       point_color="#4F845C",
-                      line_color="#C25759", 
                       point_size=20,
+                      line_color="#C25759", 
                       title=None,
                       xlabel=None,
                       ylabel=None, 
@@ -1597,17 +1807,41 @@ class NPA_Analysis():
 
         Parameters
         ----------
-        show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
-        gene_names_size: font size of gene name. 
-        gene_names_color: font color of gene name. 
-        point_color: point color.
-        line_color: strand line color.
-        point_size: point size.
-        title: title of plot.
-        xlabel: xlabel of plot.
-        ylabel: ylabel of plot.
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+    	figsize: tuple, default=(6,4)
+            Figure size.
+        
+        show_gene_names: bool, or list, default=False
+            Show gene name in plot. A list include of gene name, or bool value.
+       
+        gene_names_size, float, default=10
+            Font size of gene name. 
+        
+        gene_names_color: str, default="#0A0A0A"
+            Font color of gene name. 
+            
+        point_color: str, default="#4F845C"
+            Point color.
+            
+        point_size: float, default=20
+            Point size.
+        
+        line_color: str, default="#C25759"
+            strand line color.
+               
+        title: str, default=None
+          Title of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         xs = self.GC3
         ys = self.GC12
@@ -1667,8 +1901,11 @@ class ENC_Analysis():
 
         Parameters
         ----------
-        file: a fasta or fasta.gz format file include of CDS seqence.
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        file: str
+            A fasta or fasta.gz format file include of CDS seqence.
+    	
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         ys = []
@@ -1704,10 +1941,10 @@ class ENC_Analysis():
     def draw_ENC_plot(self, 
                       figsize=(6,4),
                       show_gene_names=False,
-                      gene_names_color="#0A0A0A",
                       gene_names_size=10,
-                      point_color="#4F845C",
+                      gene_names_color="#0A0A0A",
                       point_size = 20,
+                      point_color="#4F845C",
                       line_color="#C25759", 
                       title=None,
                       xlabel=None,
@@ -1721,18 +1958,41 @@ class ENC_Analysis():
 
         Parameters
         ----------
-        figsize: {(6,4)}
-        show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
-        gene_names_size: font size of gene name. 
-        gene_names_color: font color of gene name. 
-        point_size: point size
-        point_color: point color.
-        line_color: strand line color.
-        title: title of plot.
-        xlabel: xlabel of plot.
-        ylabel: ylabel of plot.
-        ax: {None, Aexs}
-        outfile: A path of outfile
+    	figsize: tuple, default=(6,4)
+            Figure size.
+        
+        show_gene_names: bool, or list, default=False
+            Show gene name in plot. A list include of gene name, or bool value.
+       
+        gene_names_size, float, default=10
+            Font size of gene name. 
+        
+        gene_names_color: str, default="#0A0A0A"
+            Font color of gene name. 
+            
+        point_color: str, default="#4F845C"
+            Point color.
+            
+        point_size: float, default=20
+            Point size.
+        
+        line_color: str, default="#C25759"
+            strand line color.
+               
+        title: str, default=None
+          Title of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         def gc2enc(value):
             return 2 + value + 29/(pow(value, 2) + pow(1-value, 2))
@@ -1781,8 +2041,11 @@ class PR2_Analysis():
         
         Parameters
         ----------
-        file: a fasta or fasta.gz format file.
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        file: str
+            A fasta or fasta.gz format file include of CDS seqence.
+    	
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
 
         Reference
         ----------
@@ -1840,18 +2103,41 @@ class PR2_Analysis():
 
         Parameters
         ----------
-        figsize: (6,4)
-        show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
-        gene_names_size: font size of gene name. 
-        gene_names_color: font color of gene name. 
-        point_color: point color.
-        point_size: point size.
-        line_color: strand line color.
-        title: title of plot.
-        xlabel: xlabel of plot.
-        ylabel: ylabel of plot.
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+    	figsize: tuple, default=(6,4)
+            Figure size.
+        
+        show_gene_names: bool, or list, default=False
+            Show gene name in plot. A list include of gene name, or bool value.
+       
+        gene_names_size, float, default=10
+            Font size of gene name. 
+        
+        gene_names_color: str, default="#0A0A0A"
+            Font color of gene name. 
+            
+        point_color: str, default="#4F845C"
+            Point color.
+            
+        point_size: float, default=20
+            Point size.
+        
+        line_color: str, default="#C25759"
+            strand line color.
+               
+        title: str, default=None
+          Title of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         ys = self.X_axis
         xs = self.Y_axis
@@ -1897,8 +2183,11 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-        file: A fasta or fasta.gz format file path.
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        file: str
+            A fasta or fasta.gz format file include of CDS seqence.
+    	
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         df_list = []
@@ -1953,11 +2242,12 @@ class RSCU_Single_Species_Analysis():
         """
         Description
         ----------
-        Return a dataframe of PCA.
+        Return a dataframe of principal component analysis.
         
         Parameters
         ----------
-        outfile: A path of outfile.
+    	outfile: str, default=None
+            A path of outfile.
         """
         PCA_df = self.pca.column_correlations
         PCA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")"]
@@ -1969,14 +2259,15 @@ class RSCU_Single_Species_Analysis():
             return PCA_df
         
     def get_COA_df(self, outfile=None):
-        """
+        """            
         Description
         ----------
-        Return a dataframe of COA.
+        Return a dataframe of correspondence analysis.
         
         Parameters
         ----------
-        outfile: A path of outfile.
+    	outfile: str, default=None
+            A path of outfile.
         """
         
         ca_column = self.ca.column_coordinates(self.RSCU_df)
@@ -2022,36 +2313,84 @@ class RSCU_Single_Species_Analysis():
         """  
         Description 
         -----------
-        
         Draw correspondence analysis of RSCU plot.
         
         Parameters
         ----------
-        figsize: (8,8)
-        gene_labels_color: "black"
-        gene_labels_style: {'normal', 'italic', 'oblique'}
-        gene_labels_size: 8,
-        gene_shapes_color: {None, {"gene1": "red", "gene2":"blue", ... }}
-        gene_shapes_size: 200,
-        gene_labels_ha: {"left", "right", "top", "bottom", "center"}
-        gene_labels_va: {"left", "right", "top", "bottom", "center"}
-        codon_labels_color: "black",
-        codon_labels_size: 8,
-        codon_shapes_size: 100,
-        codon_labels_ha: {"left", "right", "top", "bottom", "center"}
-        codon_labels_va: {"left", "right", "top", "bottom", "center"}
-        show_gene_labels: {bool, ["gene1", "gene2", ...]} show gene labels in plot.
-        show_gene: {bool} show gene in plot.
-        show_codon_labels: {bool, ["codon1", "codon2", ...]} show codon labels in plot.
-        show_codon: {bool} show codon in plot.
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        title_size: 12
-        xlabel_size: 12
-        ylabel_size: 12
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+    	figsize: tuple, default=(6,4)
+            Figure size.
+            
+        gene_labels_color: str, default="black"
+            Gene labels color.
+        
+        gene_labels_style: {'normal', 'italic', 'oblique'} default='normal'
+            Gene labels style.
+            
+        gene_labels_size: float, default=8
+            Gene lables size.
+        
+        gene_shapes_color: dict, default=None,
+            Gene shaple color, can be highly customized, such as {"gene1": "red", "gene2":"blue", ... }.
+        
+        gene_shapes_size: float, default=200
+            Gene shapes size.
+        
+        gene_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of gene labels.
+        
+        gene_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of gene labels.
+        
+        codon_labels_color: str, default="black"
+            Codon labels color.
+            
+        codon_labels_size: float, default=8
+            Codon labels size.
+        
+        codon_shapes_size: float, default=100
+            Codon shapes size.
+            
+        codon_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of gene labels.
+            
+        codon_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of gene labels.
+            
+        show_gene_labels: bool, or list, default=False
+            Show gene labels in figture. A list include of gene names, or bool value.
+        
+        show_gene: bool, default=True
+            Show genes in figture.
+        
+        show_codon_labels: bool, or list, default=True
+            Show codon labels in figture. A list include of codons, or bool value.
+
+        show_codon: bool, default=True
+             show codon in figture.
+                 
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         
         row_coords = self.ca.row_coordinates(self.RSCU_df)
@@ -2189,30 +2528,66 @@ class RSCU_Single_Species_Analysis():
         """
         Description 
         -----------
-        
         Draw Principal component analysis plot.
 
         Parameters
         ----------
-        figsize: (6,6)
-        labels_color: black
-        labels_style: {'normal', 'italic', 'oblique'}
-        labels_size: 8,
-        labels_ha: {"left", "right", "top", "bottom", "center"}
-        labels_va: {"left", "right", "top", "bottom", "center"}
-        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
-        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
-        shapes_size: 100,
-        show_legend: {bool}
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        title_size: 12
-        xlabel_size: 12
-        ylabel_size: 12
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+     	figsize: tuple, default=(6,6)
+            Figure size.
+        
+        labels_color: str, default="black"
+            Gene labels color.
+        
+        labels_style: {'normal', 'italic', 'oblique'} default='normal'
+            Gene labels style.
+            
+        labels_size: float, default=8
+            Gene lables size.
+            
+        labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of gene labels.
+        
+        labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of gene labels.
+            
+        show_labels: bool, or list, default=False
+            Show gene labels in figture. A list include of gene names, or bool value.
+            
+        shapes_color: dict, default=None
+            Gene shaple color, can be highly customized, such as {"gene1": "red", "gene2":"blue", ... }.
+        
+        shapes_size: float, default=200
+            Gene shapes size.
+        
+        shapes_type: dict, default=None
+            Gene shaple type, can be highly customized, such as {"gene1": "*", "gene2":"<", ... }.
+        
+        show_legend: bool, default=True
+            Show legend.
+        
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
          """
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
@@ -2308,25 +2683,45 @@ class RSCU_Single_Species_Analysis():
         """
         Description 
         -----------
-        
         Draw heatmap of RSCU.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of X-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+             
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if figsize == None:
             figsize = (14, self.RSCU_df.shape[1]/2)
         if ax == None:
@@ -2356,24 +2751,48 @@ class RSCU_Single_Species_Analysis():
         """
         Description 
         -----------
-        
         Draw clustermap of RSCU.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+        
+        row_cluster: bool, default=True
+            Clustering rows.
+            
+        col_cluster: bool, default=True
+            Clustering cols.
+        
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if figsize == None:
             figsize = (14, self.RSCU_df.shape[1]/2)
         
@@ -2395,25 +2814,33 @@ class RSCU_Single_Species_Analysis():
     
     def draw_boxplot(self,
                      figsize=None,
-                     ax=None,
                      fontstyle='normal',
-                     fontsize=10, 
+                     fontsize=10,
+                     ax=None, 
                      outfile=None):
         """
         Description 
         -----------
-        
         Draw boxplot of RSCU.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        fontstyle: {'normal', 'italic', 'oblique'}
-        fontsize: 10
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of labels.
+        
+        fontsize: float, default=10
+            Font size of labels.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if figsize == None:
             figsize = (4, self.RSCU_df.shape[1]/4)
         if ax == None:
@@ -2442,15 +2869,27 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        labels_fontstyle: {'normal', 'italic', 'oblique'}
-        labels_fontsize: 10
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        labels_fontstyle: {'normal', 'italic', 'oblique'} default='normal'
+            Font style of labels.
+            
+        labels_fontsize: float, default=10
+            Font size of labels.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         if figsize == None:
             figsize = (self.RSCU_df.shape[1]/4+1, self.RSCU_df.shape[1]/4)
@@ -2475,7 +2914,8 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-        outfile: A path of outfile.
+    	outfile: str, default=None
+            A path of outfile.
         """
         fig, axs = plt.subplots(len(self.RSCUs_dict),
                                 figsize=(8, len(self.RSCUs_dict)*4))
@@ -2494,16 +2934,24 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
+        
         dist = pdist(np.matrix(self.RSCU_df.T), metric=metric)
         dist_matrix = DistanceMatrix(squareform(dist), ids=list(self.RSCU_df.T.index))
         if tree_method == 'nj':
@@ -2531,16 +2979,24 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
+        
         tree = self.get_tree(metric, outgroup, tree_method)
         f = io.StringIO()
         tree.write(f)
@@ -2556,6 +3012,7 @@ class RSCU_Single_Species_Analysis():
                        metric='euclidean',
                        outgroup="midpoint",
                        ignore_branch_length=True,
+                       innode_label_size=0,
                        ladderize=True,
                        ladderize_by="size",
                        ladderize_direction="right",
@@ -2567,35 +3024,68 @@ class RSCU_Single_Species_Analysis():
         """
         Description 
         -----------
-        Draw tree plot of RSCU by NJ method.
+        Draw tree plot of RSCU.
         
         Parameters
         ----------
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
-        ignore_branch_length : {bool} Ignore branch lengths for cladogram
-        innode_label_size : {float} Font size for internal node labels.
-        ladderize : {bool} Enable ladderize tree sorting.
-        ladderize_by : {size, branch_length} Sort criterion.
-        ladderize_direction : {left, right} Direction for larger subtrees.
-        leaf_label_size : {float} Font size for leaf labels.
-        linewidth : {float} Branch line width.
-        height : Figure height per leaf node.
-        width : Figure width.
-        outfile: A path of outfile.
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
+                    
+        figsize: tuple, default=None
+            Figure size.
+                
+        ignore_branch_length: bool, default=True
+            Ignore branch lengths for cladogram.
+        
+        innode_label_size: float, default=0
+            Font size for internal node labels.
+        
+        ladderize: bool, default=True
+            Enable ladderize tree sorting.
+        
+        ladderize_by: {"size", "branch_length"}, default="size"
+            Sort criterion.
+        
+        ladderize_direction: {"left", "right"}, default="right"
+            Direction for larger subtrees.
+        
+        leaf_label_size: float, default=10
+            Font size for leaf labels.
+        
+        linewidth: float, default=1.5
+            Branch line width.
+        
+        height: float, default=0.7
+            Figure height per leaf node.
+        
+        width: float, default=10
+            Figure width.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method)
         plotter = TreePlotter(tree, 
                               ignore_branch_length=ignore_branch_length,
+                              innode_label_size=innode_label_size,
                               ladderize=ladderize,
                               ladderize_by=ladderize_by,
                               ladderize_direction=ladderize_direction,
@@ -2617,8 +3107,11 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        data: [("species name", "cds file path"), ...]
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        data: tuple, such as: [("species name1", "cds file1 path"), ("species name2", "cds file2 path"), ...]
+            CDS files for a set of species.
+        
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         single_codon_amino_acids = set()
@@ -2681,11 +3174,12 @@ class RSCU_Multiple_Species_Analysis():
         """
         Description
         ----------
-        Return a dataframe of PCA.
+        Return a dataframe of principal component analysis.
         
         Parameters
         ----------
-        outfile: A path of outfile.
+    	outfile: str, default=None
+            A path of outfile.
         """
         PCA_df = self.pca.column_correlations
         PCA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")"]
@@ -2697,14 +3191,15 @@ class RSCU_Multiple_Species_Analysis():
             return PCA_df
         
     def get_COA_df(self, outfile=None):
-        """
+        """            
         Description
         ----------
-        Return a dataframe of COA.
+        Return a dataframe of correspondence analysis.
         
         Parameters
         ----------
-        outfile: A path of outfile.
+    	outfile: str, default=None
+            A path of outfile.
         """
         
         ca_column = self.ca.column_coordinates(self.RSCU_df)
@@ -2755,31 +3250,80 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        figsize: (8,8)
-        species_labels_color: "black"
-        species_labels_style: {'normal', 'italic', 'oblique'}
-        species_labels_size: 8,
-        species_shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        species_shapes_size: 200,
-        species_labels_ha: {"left", "right", "top", "bottom", "center"}
-        species_labels_va: {"left", "right", "top", "bottom", "center"}
-        codon_labels_color: "black",
-        codon_labels_size: 8,
-        codon_shapes_size: 100,
-        codon_labels_ha: {"left", "right", "top", "bottom", "center"}
-        codon_labels_va: {"left", "right", "top", "bottom", "center"}
-        show_species_labels: {bool, ["species1", "species2", ...]} show species labels in plot.
-        show_species: {bool} show species in plot.
-        show_codon_labels: {bool, ["codon1", "codon2", ...]} show codon labels in plot.
-        show_codon: {bool} show codon in plot.
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        title_size: 12
-        xlabel_size: 12
-        ylabel_size: 12
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+    	figsize: tuple, default=(6,4)
+            Figure size.
+            
+        species_labels_color: str, default="black"
+            Species labels color.
+        
+        species_labels_style: {'normal', 'italic', 'oblique'} default='italic'
+            Species labels style.
+            
+        species_labels_size: float, default=8
+            Species lables size.
+        
+        species_shapes_color: dict, default=None,
+            Species shaple color, can be highly customized, such as {"species1": "red", "species2":"blue", ... }.
+        
+        species_shapes_size: float, default=200
+            Species shapes size.
+        
+        species_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of species labels.
+        
+        species_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of species labels.
+        
+        codon_labels_color: str, default="black"
+            Codon labels color.
+            
+        codon_labels_size: float, default=8
+            Codon labels size.
+        
+        codon_shapes_size: float, default=100
+            Codon shapes size.
+            
+        codon_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of species labels.
+            
+        codon_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of species labels.
+            
+        show_species_labels: bool, or list, default=False
+            Show species labels in figture. A list include of species names, or bool value.
+        
+        show_species: bool, default=True
+            Show species in figture.
+        
+        show_codon_labels: bool, or list, default=True
+            Show codon labels in figture. A list include of codons, or bool value.
+
+        show_codon: bool, default=True
+             show codon in figture.
+                 
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         
         row_coords = self.ca.row_coordinates(self.RSCU_df)
@@ -2921,26 +3465,64 @@ class RSCU_Multiple_Species_Analysis():
 
         Parameters
         ----------
-        figsize: (6,6)
-        labels_color: black
-        labels_style: {'normal', 'italic', 'oblique'}
-        labels_size: 8,
-        labels_ha: {"left", "right", "top", "bottom", "center"}
-        labels_va: {"left", "right", "top", "bottom", "center"}
-        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
-        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
-        shapes_size: 100,
-        show_legend: {bool}
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        title_size: 12
-        xlabel_size: 12
-        ylabel_size: 12
-        ax: {None, Aexs}
-        outfile: A path of outfile.
-         """
+     	figsize: tuple, default=(6,6)
+            Figure size.
+        
+        labels_color: str, default="black"
+            Species labels color.
+        
+        labels_style: {'normal', 'italic', 'oblique'} default='italic'
+            Species labels style.
+            
+        labels_size: float, default=8
+            Species lables size.
+            
+        labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of species labels.
+        
+        labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of species labels.
+            
+        show_labels: bool, or list, default=False
+            Show species labels in figture. A list include of species names, or bool value.
+            
+        shapes_color: dict, default=None
+            Species shaple color, can be highly customized, such as {"species1": "red", "species2":"blue", ... }.
+        
+        shapes_size: float, default=200
+            Species shapes size.
+        
+        shapes_type: dict, default=None
+            Species shaple type, can be highly customized, such as {"species1": "*", "species2":"<", ... }.
+        
+        show_legend: bool, default=True
+            Show legend.
+        
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
+        """
+        
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
         
@@ -3040,20 +3622,41 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of X-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+             
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if figsize == None:
             figsize = (14, self.RSCU_df.shape[1]/2)
         if ax == None:
@@ -3088,19 +3691,44 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+        
+        row_cluster: bool, default=True
+            Clustering rows.
+            
+        col_cluster: bool, default=True
+            Clustering cols.
+        
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if figsize == None:
             figsize = (14, self.RSCU_df.shape[1]/2)
         
@@ -3134,13 +3762,22 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        fontstyle: {'normal', 'italic', 'oblique'}
-        fontsize: 10
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of labels.
+        
+        fontsize: float, default=10
+            Font size of labels.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if figsize == None:
             figsize = (4, self.RSCU_df.shape[1]/4)
         if ax == None:
@@ -3169,16 +3806,29 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        labels_fontstyle: {'normal', 'italic', 'oblique'}
-        labels_fontsize: 10
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        labels_fontstyle: {'normal', 'italic', 'oblique'} default='italic'
+            Font style of labels.
+            
+        labels_fontsize: float, default=10
+            Font size of labels.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if figsize == None:
             figsize = (self.RSCU_df.shape[1]/4+1, self.RSCU_df.shape[1]/4)
         if ax == None:
@@ -3202,8 +3852,10 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        outfile: A path of outfile.
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         fig, axs = plt.subplots(len(self.RSCUs_dict),
                                 figsize=(8, len(self.RSCUs_dict)*4))
         fig.subplots_adjust(hspace=0.8)
@@ -3221,16 +3873,24 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
+        
         dist = pdist(np.matrix(self.RSCU_df.T), metric=metric)
         dist_matrix = DistanceMatrix(squareform(dist), ids=list(self.RSCU_df.T.index))
         if tree_method == 'nj':
@@ -3258,16 +3918,24 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
+        
         tree = self.get_tree(metric, outgroup, tree_method)
         f = io.StringIO()
         tree.write(f)
@@ -3283,6 +3951,7 @@ class RSCU_Multiple_Species_Analysis():
                        metric='euclidean',
                        outgroup="midpoint",
                        ignore_branch_length=True,
+                       innode_label_size=0,
                        ladderize=True,
                        ladderize_by="size",
                        ladderize_direction="right",
@@ -3298,31 +3967,63 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
-        figsize: tuple of (width, height), optional
-        ax: matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
-        ignore_branch_length: {bool} Ignore branch lengths for cladogram
-        innode_label_size: {float} Font size for internal node labels.
-        ladderize: {bool} Enable ladderize tree sorting.
-        ladderize_by: {size, branch_length} Sort criterion.
-        ladderize_direction: {left, right} Direction for larger subtrees.
-        leaf_label_size: {float} Font size for leaf labels.
-        linewidth: {float} Branch line width.
-        height: Figure height per leaf node.
-        width: Figure width.
-        outfile: A path of outfile.
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
+                    
+        figsize: tuple, default=None
+            Figure size.
+                
+        ignore_branch_length: bool, default=True
+            Ignore branch lengths for cladogram.
+        
+        innode_label_size: float, default=0
+            Font size for internal node labels.
+        
+        ladderize: bool, default=True
+            Enable ladderize tree sorting.
+        
+        ladderize_by: {"size", "branch_length"}, default="size"
+            Sort criterion.
+        
+        ladderize_direction: {"left", "right"}, default="right"
+            Direction for larger subtrees.
+        
+        leaf_label_size: float, default=10
+            Font size for leaf labels.
+        
+        linewidth: float, default=1.5
+            Branch line width.
+        
+        height: float, default=0.7
+            Figure height per leaf node.
+        
+        width: float, default=10
+            Figure width.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method)
         plotter = TreePlotter(tree, 
                               ignore_branch_length=ignore_branch_length,
+                              innode_label_size=0,
                               ladderize=ladderize,
                               ladderize_by=ladderize_by,
                               ladderize_direction=ladderize_direction,
@@ -3343,8 +4044,11 @@ class AA_Composition_Single_Species_Analysis():
         
         Parameters
         ----------
-        file: A fasta or fasta.gz format file path.
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        file: str
+            A fasta or fasta.gz format file include of CDS seqence.
+    	
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
@@ -3356,7 +4060,7 @@ class AA_Composition_Single_Species_Analysis():
                         'Ser':0, 'Thr':0, 'Phe':0, 'Trp':0, 'Tyr':0,
                         'Arg':0, 'His':0, 'Cys':0, 'Pro':0, 'Lys':0}
             for aa in translate(Seq, genetic_code=genetic_code):
-                if  aa != "*":
+                if (aa != "*") and (aa in Seq1toSeq3):
                     AA_count[Seq1toSeq3[aa]] += 1        
             AA_count_list.append(pd.DataFrame({ID:AA_count}))
         self.AA_count_df = pd.concat(AA_count_list, axis=1)
@@ -3397,13 +4101,17 @@ class AA_Composition_Single_Species_Analysis():
         """
         Description
         ----------
-        get PCA data.
+        Return a dataframe of principal component analysis.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+    	
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             pca = self.AA_Fraction_pca
         else:
@@ -3422,13 +4130,17 @@ class AA_Composition_Single_Species_Analysis():
         """
         Description
         ----------
-        get COA data.
+        Return a dataframe of correspondence analysis.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+    	
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             ca = self.AA_Fraction_ca
             ca_column = ca.column_coordinates(self.AA_Fraction_df)
@@ -3464,26 +4176,48 @@ class AA_Composition_Single_Species_Analysis():
         """
         Description 
         -----------
-        
-        Draw heatmap of count or Fraction.
+        Draw heatmap of Count or Fraction.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of X-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+             
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
         else:
@@ -3519,26 +4253,51 @@ class AA_Composition_Single_Species_Analysis():
         """
         Description 
         -----------
-        
-        Draw clustermap of count or Fraction.
+        Draw clustermap of Count or Fraction.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+        
+        row_cluster: bool, default=True
+            Clustering rows.
+            
+        col_cluster: bool, default=True
+            Clustering cols.
+        
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
         else:
@@ -3573,19 +4332,29 @@ class AA_Composition_Single_Species_Analysis():
         """
         Description 
         -----------
-        
-        Draw boxplot of count or Fraction.
+        Draw boxplot of Count or Fraction.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        fontstyle: {'normal', 'italic', 'oblique'}
-        fontsize: 10
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of labels.
+        
+        fontsize: float, default=10
+            Font size of labels.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
         else:
@@ -3619,22 +4388,36 @@ class AA_Composition_Single_Species_Analysis():
         """
         Description 
         -----------
-        
-        Draw pearson heatmap of count or Fraction.
+        Draw pearson heatmap of Count or Fraction.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        figsize: tuple of (width, height), optional
-        cmap: matplotlib colormap name or object, or list of colors, optional
-              The mapping from data values to color space. If not provided, the
-              default will depend on whether ``center`` is set.
-        ax: matplotlib Axes, optional 
-            Axes in which to draw the plot, otherwise use the currently-active Axes.
-        labels_fontstyle: {'normal', 'italic', 'oblique'}
-        labels_fontsize: 10
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        labels_fontstyle: {'normal', 'italic', 'oblique'} default='italic'
+            Font style of labels.
+            
+        labels_fontsize: float, default=10
+            Font size of labels.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
         else:
@@ -3688,33 +4471,85 @@ class AA_Composition_Single_Species_Analysis():
 
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        show_gene_labels: {bool, ["gene1", "gene2", ...]} show gene labels in plot.
-        show_gene: show gene in plot.
-        show_amino_acid_labels: {bool, ["codon1", "codon2", ...]} show amino acid labels in plot.
-        show_amino_acid: {bool} show amino acid in plot.
-        figsize: (8,8)
-        gene_labels_color: "black"
-        gene_labels_style: {'normal', 'italic', 'oblique'}
-        gene_labels_size: 8,
-        gene_shapes_color: {None, {"gene1": "red", "gene2":"blue", ... }}
-        gene_shapes_size: 200,
-        gene_labels_ha: {"left", "right", "top", "bottom", "center"}
-        gene_labels_va: {"left", "right", "top", "bottom", "center"}
-        amino_acid_labels_color: "black",
-        amino_acid_labels_size: 8,
-        amino_acid_shapes_size: 100,
-        amino_acid_labels_ha: {"left", "right", "top", "bottom", "center"}
-        amino_acid_labels_va: {"left", "right", "top", "bottom", "center"}
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        title_size: 12
-        xlabel_size: 12
-        ylabel_size: 12
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+    	figsize: tuple, default=(8,8)
+            Figure size.
+            
+        gene_labels_color: str, default="black"
+            Gene labels color.
+        
+        gene_labels_style: {'normal', 'italic', 'oblique'} default='normal'
+            Gene labels style.
+            
+        gene_labels_size: float, default=8
+            Gene lables size.
+        
+        gene_shapes_color: dict, default=None,
+            Gene shaple color, can be highly customized, such as {"gene1": "red", "gene2":"blue", ... }.
+        
+        gene_shapes_size: float, default=200
+            Gene shapes size.
+        
+        gene_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of gene labels.
+        
+        gene_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of gene labels.
+        
+        amino_acid_labels_color: str, default="black"
+            Amino acid labels color.
+            
+        amino_acid_labels_size: float, default=8
+            Amino acid labels size.
+        
+        amino_acid_shapes_size: float, default=100
+            Amino acid shapes size.
+            
+        amino_acid_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of gene labels.
+            
+        amino_acid_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of gene labels.
+            
+        show_gene_labels: bool, or list, default=False
+            Show gene labels in figture. A list include of gene names, or bool value.
+        
+        show_gene: bool, default=True
+            Show gene in figture.
+        
+        show_amino_acid_labels: bool, or list, default=True
+            Show amino acid labels in figture. A list include of amino acids, or bool value.
+
+        show_amino_acid: bool, default=True
+             show amino acids in figture.
+                 
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
             ca = self.AA_Fraction_ca
@@ -3855,24 +4690,67 @@ class AA_Composition_Single_Species_Analysis():
 
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        show_labels: {bool, ["gene1", "gene2", ...]} show column names in plot.
-        show_legend: {bool}
-        figsize: (6,6)
-        labels_color: black
-        labels_style: {'normal', 'italic', 'oblique'}
-        labels_size: 8,
-        shapes_color: {None, {"gene1": "red", "gene2":"blue", ... }}
-        shapes_type: {None, {"gene1": "*", "gene":"<", ... }}
-        shapes_size: 100,
-        labels_ha: {"left", "right", "top", "bottom", "center"}
-        labels_va: {"left", "right", "top", "bottom", "center"}
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+     	figsize: tuple, default=(6,6)
+            Figure size.
+        
+        labels_color: str, default="black"
+            Gene labels color.
+        
+        labels_style: {'normal', 'italic', 'oblique'} default='normal'
+            Gene labels style.
+            
+        labels_size: float, default=8
+            Gene lables size.
+            
+        labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of gene labels.
+        
+        labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of gene labels.
+            
+        show_labels: bool, or list, default=False
+            Show gene labels in figture. A list include of gene names, or bool value.
+            
+        shapes_color: dict, default=None
+            Gene shaple color, can be highly customized, such as {"gene1": "red", "gene2":"blue", ... }.
+        
+        shapes_size: float, default=200
+            Gene shapes size.
+        
+        shapes_type: dict, default=None
+            Gene shaple type, can be highly customized, such as {"gene1": "*", "gene2":"<", ... }.
+        
+        show_legend: bool, default=True
+            Show legend.
+        
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             pca = self.AA_Fraction_pca
         else:
@@ -3966,16 +4844,25 @@ class AA_Composition_Single_Species_Analysis():
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
         
         if dtype == "Fraction":
@@ -4010,16 +4897,25 @@ class AA_Composition_Single_Species_Analysis():
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
         tree = self.get_tree(metric, outgroup, tree_method, dtype)
         f = io.StringIO()
@@ -4036,6 +4932,7 @@ class AA_Composition_Single_Species_Analysis():
                        metric='euclidean',
                        outgroup="midpoint",
                        ignore_branch_length=True,
+                       innode_label_size=0,
                        ladderize=True,
                        ladderize_by="size",
                        ladderize_direction="right",
@@ -4048,36 +4945,70 @@ class AA_Composition_Single_Species_Analysis():
         """
         Description 
         -----------
-        Draw tree plot of amino acid composition by NJ method.
+        Draw tree plot of amino acid composition.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
-        ignore_branch_length : {bool} Ignore branch lengths for cladogram
-        innode_label_size : {float} Font size for internal node labels.
-        ladderize : {bool} Enable ladderize tree sorting.
-        ladderize_by : {size, branch_length} Sort criterion.
-        ladderize_direction : {left, right} Direction for larger subtrees.
-        leaf_label_size : {float} Font size for leaf labels.
-        linewidth : {float} Branch line width.
-        height : Figure height per leaf node.
-        width : Figure width.
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
+                    
+        figsize: tuple, default=None
+            Figure size.
+                
+        ignore_branch_length: bool, default=True
+            Ignore branch lengths for cladogram.
+        
+        innode_label_size: float, default=0
+            Font size for internal node labels.
+        
+        ladderize: bool, default=True
+            Enable ladderize tree sorting.
+        
+        ladderize_by: {"size", "branch_length"}, default="size"
+            Sort criterion.
+        
+        ladderize_direction: {"left", "right"}, default="right"
+            Direction for larger subtrees.
+        
+        leaf_label_size: float, default=10
+            Font size for leaf labels.
+        
+        linewidth: float, default=1.5
+            Branch line width.
+        
+        height: float, default=0.7
+            Figure height per leaf node.
+        
+        width: float, default=10
+            Figure width.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method, dtype=dtype)
         plotter = TreePlotter(tree, 
                               ignore_branch_length=ignore_branch_length,
+                              innode_label_size=0,
                               ladderize=ladderize,
                               ladderize_by=ladderize_by,
                               ladderize_direction=ladderize_direction,
@@ -4099,8 +5030,11 @@ class AA_Composition_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        data: [("species name", "cds file path"), ...]
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
+        data: tuple, such as: [("species name1", "cds file1 path"), ("species name2", "cds file2 path"), ...]
+            CDS files for a set of species.
+        
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
@@ -4151,13 +5085,17 @@ class AA_Composition_Multiple_Species_Analysis():
         """
         Description
         ----------
-        get PCA data.
+        Return a dataframe of principal component analysis.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+    	
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             pca = self.AA_Fraction_pca
         else:
@@ -4176,13 +5114,17 @@ class AA_Composition_Multiple_Species_Analysis():
         """
         Description
         ----------
-        get COA data.
+        Return a dataframe of correspondence analysis.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+    	
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             ca = self.AA_Fraction_ca
             ca_column = ca.column_coordinates(self.AA_Fraction_df)
@@ -4218,26 +5160,48 @@ class AA_Composition_Multiple_Species_Analysis():
         """
         Description 
         -----------
-        
-        Draw heatmap of count or Fraction.
+        Draw heatmap of Count or Fraction.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of X-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+             
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
         else:
@@ -4273,26 +5237,51 @@ class AA_Composition_Multiple_Species_Analysis():
         """
         Description 
         -----------
-        
-        Draw clustermap of count or Fraction.
+        Draw clustermap of Count or Fraction.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+        
+        row_cluster: bool, default=True
+            Clustering rows.
+            
+        col_cluster: bool, default=True
+            Clustering cols.
+        
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
         else:
@@ -4327,18 +5316,27 @@ class AA_Composition_Multiple_Species_Analysis():
         """
         Description 
         -----------
-        
-        Draw boxplot of count or Fraction.
+        Draw boxplot of Count or Fraction.
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        fontstyle: {'normal', 'italic', 'oblique'}
-        fontsize: 10
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of labels.
+        
+        fontsize: float, default=10
+            Font size of labels.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         if dtype == "Fraction":
             df = self.AA_Fraction_df
@@ -4378,17 +5376,32 @@ class AA_Composition_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        figsize: tuple of (width, height), optional
-        cmap: matplotlib colormap name or object, or list of colors, optional
-              The mapping from data values to color space. If not provided, the
-              default will depend on whether ``center`` is set.
-        ax: matplotlib Axes, optional 
-            Axes in which to draw the plot, otherwise use the currently-active Axes.
-        labels_fontstyle: {'normal', 'italic', 'oblique'}
-        labels_fontsize: 10
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        labels_fontstyle: {'normal', 'italic', 'oblique'} default='italic'
+            Font style of labels.
+            
+        labels_fontsize: float, default=10
+            Font size of labels.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
         else:
@@ -4442,33 +5455,85 @@ class AA_Composition_Multiple_Species_Analysis():
 
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        show_species_labels: {bool, ["species1", "species2", ...]} show species labels in plot.
-        show_species: show species in plot.
-        show_amino_acid_labels: {bool, ["codon1", "codon2", ...]} show amino acid labels in plot.
-        show_amino_acid: {bool} show amino acid in plot.
-        figsize: (8,8)
-        species_labels_color: "black"
-        species_labels_style: {'normal', 'italic', 'oblique'}
-        species_labels_size: 8,
-        species_shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        species_shapes_size: 200,
-        species_labels_ha: {"left", "right", "top", "bottom", "center"}
-        species_labels_va: {"left", "right", "top", "bottom", "center"}
-        amino_acid_labels_color: "black",
-        amino_acid_labels_size: 8,
-        amino_acid_shapes_size: 100,
-        amino_acid_labels_ha: {"left", "right", "top", "bottom", "center"}
-        amino_acid_labels_va: {"left", "right", "top", "bottom", "center"}
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        title_size: 12
-        xlabel_size: 12
-        ylabel_size: 12
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+    	figsize: tuple, default=(6,4)
+            Figure size.
+            
+        species_labels_color: str, default="black"
+            Species labels color.
+        
+        species_labels_style: {'normal', 'italic', 'oblique'} default='normal'
+            Species labels style.
+            
+        species_labels_size: float, default=8
+            Species lables size.
+        
+        species_shapes_color: dict, default=None,
+            Species shaple color, can be highly customized, such as {"species1": "red", "species2":"blue", ... }.
+        
+        species_shapes_size: float, default=200
+            Species shapes size.
+        
+        species_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of species labels.
+        
+        species_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of species labels.
+        
+        amino_acid_labels_color: str, default="black"
+            Amino acid labels color.
+            
+        amino_acid_labels_size: float, default=8
+            Amino acid labels size.
+        
+        amino_acid_shapes_size: float, default=100
+            Amino acid shapes size.
+            
+        amino_acid_labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of species labels.
+            
+        amino_acid_labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of species labels.
+            
+        show_species_labels: bool, or list, default=False
+            Show species labels in figture. A list include of species names, or bool value.
+        
+        show_species: bool, default=True
+            Show species in figture.
+        
+        show_amino_acid_labels: bool, or list, default=True
+            Show amino acid labels in figture. A list include of amino acids, or bool value.
+
+        show_amino_acid: bool, default=True
+             show amino acids in figture.
+                 
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if dtype == "Fraction":
             df = self.AA_Fraction_df
             ca = self.AA_Fraction_ca
@@ -4610,23 +5675,65 @@ class AA_Composition_Multiple_Species_Analysis():
 
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
-        show_legend: {bool}
-        figsize: (6,6)
-        labels_color: black
-        labels_style: {'normal', 'italic', 'oblique'}
-        labels_size: 8,
-        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
-        shapes_size: 100,
-        labels_ha: {"left", "right", "top", "bottom", "center"}
-        labels_va: {"left", "right", "top", "bottom", "center"}
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+     	figsize: tuple, default=(6,6)
+            Figure size.
+        
+        labels_color: str, default="black"
+            Species labels color.
+        
+        labels_style: {'normal', 'italic', 'oblique'} default='normal'
+            Species labels style.
+            
+        labels_size: float, default=8
+            Species lables size.
+            
+        labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of species labels.
+        
+        labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of species labels.
+            
+        show_labels: bool, or list, default=False
+            Show species labels in figture. A list include of species names, or bool value.
+            
+        shapes_color: dict, default=None
+            Species shaple color, can be highly customized, such as {"species1": "red", "species2":"blue", ... }.
+        
+        shapes_size: float, default=200
+            Species shapes size.
+        
+        shapes_type: dict, default=None
+            Species shaple type, can be highly customized, such as {"species1": "*", "species2":"<", ... }.
+        
+        show_legend: bool, default=True
+            Show legend.
+        
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         if dtype == "Fraction":
             pca = self.AA_Fraction_pca
@@ -4721,16 +5828,25 @@ class AA_Composition_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
         
         if dtype == "Fraction":
@@ -4765,16 +5881,25 @@ class AA_Composition_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
         """
         tree = self.get_tree(metric, outgroup, tree_method, dtype)
         f = io.StringIO()
@@ -4791,6 +5916,7 @@ class AA_Composition_Multiple_Species_Analysis():
                        metric='euclidean',
                        outgroup="midpoint",
                        ignore_branch_length=True,
+                       innode_label_size=0,
                        ladderize=True,
                        ladderize_by="size",
                        ladderize_direction="right",
@@ -4807,32 +5933,67 @@ class AA_Composition_Multiple_Species_Analysis():
         
         Parameters
         ----------
-        dtype: {Fraction, count} Choose to use amino acid composition count or Fraction.
-        tree_method: {nj, upgma, gme, bme}  Method of phylogenetic reconstruction. See also skibio.tree.
-        metric : {euclidean, cityblock, braycurtis, canberra, chebyshev,
-        correlation, cosine, dice, hamming, jaccard, jensenshannon,
-        kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
-        russellrao, seuclidean, sokalmichener, sokalsneath,
-        sqeuclidean, yule} The distance metric to use. 
-        Euclidean distance, high sensitivity, suitable for related species;
-        braycurtis distance reduces the impact of extreme values, suitable for distant species or highly variable genes, emphasizing compositional differences, such as ecological data
-        outgroup : {None, midpoint, list[Species1, Species2, ...]}  if outgroup == None, return unroot tree.
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, Axes in which to draw the plot, otherwise use the currently-active Axes.        
-        ignore_branch_length : {bool} Ignore branch lengths for cladogram
-        innode_label_size : {float} Font size for internal node labels.
-        ladderize : {bool} Enable ladderize tree sorting.
-        ladderize_by : {size, branch_length} Sort criterion.
-        ladderize_direction : {left, right} Direction for larger subtrees.
-        leaf_label_size : {float} Font size for leaf labels.
-        linewidth : {float} Branch line width.
-        height : Figure height per leaf node.
-        width : Figure width.
-        outfile: A path of outfile.
+        dtype: {"Fraction", "Count"} default="Fraction"
+            Choose to use amino acid composition Count or Fraction.
+            
+        tree_method: {nj, upgma, gme, bme} default='nj'
+            Method of phylogenetic reconstruction. See also skibio.tree.
+        
+        metric: {euclidean, cityblock, braycurtis, canberra, chebyshev, 
+                 correlation, cosine, dice, hamming, jaccard, jensenshannon, 
+                 kulczynski1, mahalanobis, matching, minkowski, rogerstanimoto,
+                 russellrao, seuclidean, sokalmichener, sokalsneath,
+                 sqeuclidean, yule}, default="euclidean"
+            The distance metric to use. 
+            Euclidean distance, high sensitivity, suitable for related species; 
+            braycurtis distance reduces the impact of extreme values, 
+            suitable for distant species or highly variable genes, 
+            emphasizing compositional differences, such as ecological data
+        
+        outgroup: None, midpoint, list, default="midpoint"
+            If outgroup == None, return unroot tree.
+                    
+        figsize: tuple, default=None
+            Figure size.
+                
+        ignore_branch_length: bool, default=True
+            Ignore branch lengths for cladogram.
+        
+        innode_label_size: float, default=0
+            Font size for internal node labels.
+        
+        ladderize: bool, default=True
+            Enable ladderize tree sorting.
+        
+        ladderize_by: {"size", "branch_length"}, default="size"
+            Sort criterion.
+        
+        ladderize_direction: {"left", "right"}, default="right"
+            Direction for larger subtrees.
+        
+        leaf_label_size: float, default=10
+            Font size for leaf labels.
+        
+        linewidth: float, default=1.5
+            Branch line width.
+        
+        height: float, default=0.7
+            Figure height per leaf node.
+        
+        width: float, default=10
+            Figure width.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method, dtype=dtype)
         plotter = TreePlotter(tree, 
                               ignore_branch_length=ignore_branch_length,
+                              innode_label_size=0,
                               ladderize=ladderize,
                               ladderize_by=ladderize_by,
                               ladderize_direction=ladderize_direction,
@@ -4854,9 +6015,11 @@ class Stop_Codon_Analysis():
         
         Parameters
         ----------
-        data: [("species name", "cds file path"), ...]
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
-        incomplete_codon: {bool} Whether it contains incomplete codon, which is crucial for mitochondrial genes.
+        data: tuple, such as: [("species name1", "cds file1 path"), ("species name2", "cds file2 path"), ...]
+            CDS files for a set of species.
+        
+    	genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         StopCodon_Count_dict = {}
         GeneName2StopCodon_dict = {}
@@ -4897,6 +6060,17 @@ class Stop_Codon_Analysis():
         self.pca = pca.fit(self.StopCodon_Count_df)
         
     def get_df(self):
+	"""
+        Description
+        ----------
+        Return a dataframe of Stop codon analysis.
+        
+        Parameters
+        ----------
+    	outfile: str, default=None
+            A path of outfile.
+	"""
+	
         return pd.melt(self.StopCodon_Count_df.reset_index(), id_vars="Stop Codon", value_name="Count", var_name="Group")
         
     def draw_barplot(self, figsize=None, ax=None, palette="Blues", legend_font_style="italic", legend_font_size=10, outfile=None):
@@ -4907,13 +6081,26 @@ class Stop_Codon_Analysis():
         
         Parameters
         ----------
-        figsize: {None, (float, float)}
-        palette: {"Blues", "Set1", "Set2" ...}
-        legend_font_style: {'normal', 'italic', 'oblique'}
+        figsize: tuple, default=None
+            Figure size.
+            
+    	palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
+            Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+            Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+        
+        legend_font_style: {'normal', 'italic', 'oblique'}, default='italic'
+            Font stylt of legend.
+        
         legend_font_size: 10
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+            Font size of legend.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         df = self.get_df()
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
@@ -4938,25 +6125,48 @@ class Stop_Codon_Analysis():
         """
         Description 
         -----------
-        
         Draw clustermap of count or Fraction.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        ylabels_fontstyle: {'normal', 'italic', 'oblique'}
-        xlabels_fontstyle: {'normal', 'italic', 'oblique'}
-        ylabels_fontsize: 10
-        xlabels_fontsize: 10
-        show_ylabels: {bool}
-        show_xlabels: {bool}
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        ylabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+        
+        xlabels_fontstyle: {'normal', 'italic', 'oblique'}, default='normal'
+            Font style of Y-axis labels.
+            
+        ylabels_fontsize: float, default=10
+            Y-axis label font size of figture.
+        
+        xlabels_fontsize: float, default=10
+            X-axis label font size of figture.
+        
+        show_ylabels: bool, default=True
+            Show Y-axis label of figtrue.
+            
+        show_xlabels: bool, default=True
+             Show Y-axis label of figtrue.
+        
+        row_cluster: bool, default=True
+            Clustering rows.
+            
+        col_cluster: bool, default=True
+            Clustering cols.
+        
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         df = self.StopCodon_Count_df
         cmp = sns.clustermap(df.T,
                              figsize=figsize, 
@@ -4977,22 +6187,31 @@ class Stop_Codon_Analysis():
                      figsize=None,
                      ax=None,
                      fontstyle='italic',
-                     fontsize=10, outfile=None):
+                     fontsize=10, 
+                     outfile=None):
         """
         Description 
         -----------
-        
         Draw boxplot of stop codon count.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        fontstyle: {'normal', 'italic', 'oblique'}
-        fontsize: 10
-        outfile: A path of outfile.
+        figsize: tuple, default=None
+            Figure size.
+            
+        fontstyle: {'normal', 'italic', 'oblique'}, default='italic'
+            Font style of labels.
+        
+        fontsize: float, default=10
+            Font size of labels.
+        
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
             
@@ -5031,22 +6250,63 @@ class Stop_Codon_Analysis():
 
         Parameters
         ----------
-        show_labels: {bool, ["species1", "species2", ...]} show column names in plot.
-        show_legend: {bool}
-        figsize: (6,6)
-        labels_color: black
-        labels_style: {'normal', 'italic', 'oblique'}
-        labels_size: 8,
-        shapes_color: {None, {"species1": "red", "species2":"blue", ... }}
-        shapes_type: {None, {"species1": "*", "species2":"<", ... }}
-        shapes_size: 100,
-        labels_ha: {"left", "right", "top", "bottom", "center"}
-        labels_va: {"left", "right", "top", "bottom", "center"}
-        title {None, str}
-        xlabel {None, str}
-        ylabel {None, str}
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+     	figsize: tuple, default=(6,6)
+            Figure size.
+        
+        labels_color: str, default="black"
+            Species labels color.
+        
+        labels_style: {'normal', 'italic', 'oblique'} default='normal'
+            Species labels style.
+            
+        labels_size: float, default=8
+            Species lables size.
+            
+        labels_ha: {"left", "right", "top", "bottom", "center"}, default="left"
+            Horizontalalignment of species labels.
+        
+        labels_va: {"left", "right", "top", "bottom", "center"}, default="bottom"
+            Verticalalignment of species labels.
+            
+        show_labels: bool, or list, default=False
+            Show species labels in figture. A list include of species names, or bool value.
+            
+        shapes_color: dict, default=None
+            Species shaple color, can be highly customized, such as {"species1": "red", "species2":"blue", ... }.
+        
+        shapes_size: float, default=200
+            Species shapes size.
+        
+        shapes_type: dict, default=None
+            Species shaple type, can be highly customized, such as {"species1": "*", "species2":"<", ... }.
+        
+        show_legend: bool, default=True
+            Show legend.
+        
+        title: str, default=None
+            Title of figture.
+        
+        title_size: float, default=12
+            Title font size of figture.
+        
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        xlabel_size: float, default=12
+            X-axis label font size of figture.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+        ylabel_size: float, default=12
+            Y-axis label font size of figture.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
+            
         """
         pca = self.pca
         if ax == None:
@@ -5129,8 +6389,6 @@ class Stop_Codon_Analysis():
         return res
 
 class TreePlotter:
-    """Phylogenetic Tree Plotter using scikit-bio's TreeNode"""
-    
     def __init__(
         self,
         tree,
@@ -5143,31 +6401,45 @@ class TreePlotter:
         ladderize_by= "size",  # "size" or "branch_length"
         ladderize_direction= "right",  # "left" or "right"
         linewidth= 1
-    ):
+        ):
         """
+        Description 
+        ----------
+        Phylogenetic Tree Plotter using scikit-bio's TreeNode.
+        
         Parameters
         ----------
-        tree : TreeNode
-            Input tree (must be rooted)
-        height : float
-            Figure height per leaf node
-        width : float
-            Figure width
-        ignore_branch_length : bool
-            Ignore branch lengths for cladogram
-        leaf_label_size : float
-            Font size for leaf labels
-        innode_label_size : float
-            Font size for internal node labels
-        ladderize : bool
-            Enable ladderize tree sorting
-        ladderize_by : str
-            Sort criterion ("size" or "branch_length")
-        ladderize_direction : str
-            Direction for larger subtrees ("left" or "right")
-        linewidth : float
-            Branch line width
+        tree: TreeNode
+            Input tree (must be rooted).
+
+        height: float, default=0.7
+            Figure height per leaf node.
+        
+        width: float, default=10
+            Figure width.
+                
+        ignore_branch_length: bool, default=True
+            Ignore branch lengths for cladogram.
+        
+        innode_label_size: float, default=0
+            Font size for internal node labels.
+        
+        leaf_label_size: float, default=10
+            Font size for leaf labels.
+            
+        ladderize: bool, default=True
+            Enable ladderize tree sorting.
+        
+        ladderize_by: {"size", "branch_length"}, default="size"
+            Sort criterion.
+        
+        ladderize_direction: {"left", "right"}, default="right"
+            Direction for larger subtrees.
+        
+        linewidth: float, default=1.5
+            Branch line width.
         """
+        
         self.tree = tree.copy()
         self.ignore_branch_length = ignore_branch_length
         self.linewidth = linewidth
@@ -5212,16 +6484,20 @@ class TreePlotter:
         by="size", 
         direction="right"
     ):
-        """Recursive ladderization of tree structure
+        """
+        Description 
+        ----------
+        Recursive ladderization of tree structure
         
         Parameters
         ----------
-        by : str
+        by: str
             Sorting criterion: "size" (subtree tip count) or 
             "branch_length" (subtree total length)
-        direction : str
+        direction: str
             Direction for larger subtrees: "left" or "right"
         """
+        
         if not tree.children:
             return
         
@@ -5244,13 +6520,12 @@ class TreePlotter:
             self._ladderize(child, by, direction)
     
     def _calc_node_positions(self):
-        """Calculate node coordinates (x, y) via depth-first traversal
-        
-        Returns
-        -------
-        dict
-            Mapping of node names to (x, y) coordinates
+        """        
+        Description 
+        ----------
+        Calculate node coordinates (x, y) via depth-first traversal
         """
+        
         positions = {}
         tips = list(self.tree.tips())
         num_tips = len(tips)
@@ -5302,19 +6577,22 @@ class TreePlotter:
     # Plotting Methods
     # =====================
     
-    def plot(
-        self, 
-        figsize=(8,8),
-        ax= None, outfile=None):
-        """Plot rectangular layout phylogenetic tree
+    def plot(self, figsize=(8,8), ax= None, outfile=None):
+        """
+        Description 
+        ----------
+        Plot rectangular layout phylogenetic tree
         
         Parameters
         ----------
-        ax : matplotlib.axes.Axes, optional
-            Existing axes to plot on
-        outfile: A path of outfile.
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
+        
         Returns
-        -------
+        ----------
         matplotlib.figure.Figure
             The generated figure
         """
@@ -5385,7 +6663,10 @@ class TreePlotter:
         alpha= 0.3,
         **kwargs
     ):
-        """Highlight a clade with background rectangle
+        """
+        Description 
+        ----------
+        Highlight a clade with background rectangle
         
         Parameters
         ----------
@@ -5425,7 +6706,10 @@ class TreePlotter:
         size= 8,
         **kwargs
     ):
-        """Add custom text label to a specific node
+        """
+        Description 
+        ----------
+        Add custom text label to a specific node
         
         Parameters
         ----------
@@ -5453,7 +6737,9 @@ class TreePlotter:
         label, 
         position= (0.05, 0.05),
         **kwargs):
-        """Add evolutionary distance scale bar
+        """Description 
+        ----------
+        Add evolutionary distance scale bar
         
         Parameters
         ----------
@@ -5492,14 +6778,24 @@ class Sequence_Indices_Analysis():
         
         Parameters
         ----------
-        file: a fasta or fasta.gz format file include of CDS seqence.
-        genetic_code: genetic code id, use `import codontables; codontables.CodonTables()` for more details.
-        optimal_codons: It can be the return value from the get_optimal_codons_from_codonw_coafile function,
-                        or return value from get_optimal_codons_from_ENC() function,
-                        or it can be a preset value from the codonw software, such as {"Escherichia coli", "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"}
-                        or it can be a custom list containing the best codons.
-        cai_ref_Obs: get_Obs function return value. Observed number of occurrences of codon in a reference set of genes.
-                     Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
+        file: str
+    	    A fasta or fasta.gz format file path.
+    	
+        genetic_code: int
+    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+    	
+        cai_ref_Obs: str, dict, default="Escherichia coli"
+    	    get_Obs() function return value.
+    	    Observed number of occurrences of codon in a reference set of genes.
+            Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
+        
+        optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
+    	    It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+    	    or return value from get_optimal_codons_from_ENC() function,
+    	    or it can be a custom list containing the best codons,
+    	    or it can be a preset value from the codonw software, such as "Escherichia coli",
+    	    "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+    	    "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
         """
         tmp = []
         index = ['A', 'T', 'G', 'C', 'GC', 'AT', 'GC-skew', 'AT-skew',
@@ -5534,20 +6830,34 @@ class Sequence_Indices_Analysis():
         """
         Description 
         -----------
-        Draw pearson heatmap of RSCU.
+        Draw pearson heatmap.
         
         Parameters
         ----------
-        figsize: tuple of (width, height), optional
-        cmap : matplotlib colormap name or object, or list of colors, optional
-               The mapping from data values to color space. If not provided, the
-               default will depend on whether ``center`` is set.
-        ax : matplotlib Axes, optional 
-             Axes in which to draw the plot, otherwise use the currently-active Axes.
-        labels_fontstyle: {'normal', 'italic', 'oblique'}
-        labels_fontsize: 10
-        outfile: A path of outfile.
-        indices: {"all", list} A indices list, such as ["GC1s", "GC2s", "GC3s", "CAI", "CBI", "Fop", "L_aa", 'Aromaticity', 'Hydropathicity'].
+        figsize: tuple, default=None
+            Figure size.
+            
+        cmap: matplotlib colormap name or object, or list of colors, default="Blues"
+            The mapping from data values to color space, such as 'Greys', 'Purples',
+            'Blues', 'Greens', 'Oranges', 'Reds', 'YlOrBr', 'YlOrRd', 'OrRd',
+            'PuRd', 'RdPu', 'BuPu', 'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn',
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu', 'RdYlGn', 
+            'Spectral', 'coolwarm', 'bwr', 'seismic', 'berlin', 'managua', 'vanimo'
+            
+        labels_fontstyle: {'normal', 'italic', 'oblique'} default='italic'
+            Font style of labels.
+            
+        labels_fontsize: float, default=10
+            Font size of labels.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
+            
+        indices: str, list, default="all"
+            A indices list, such as ["GC1s", "GC2s", "GC3s", "CAI", "CBI", "Fop", "L_aa", 'Aromaticity', 'Hydropathicity'].
         """
         
         if indices == 'all':
@@ -5592,20 +6902,47 @@ class Sequence_Indices_Analysis():
         
         Parameters
         ----------
-        x_axis: {str} A sequence indices.
-        y_axis: {str} A sequence indices.
-        figsize: figure size.
-        show_gene_names: {bool, ["gene_name1", "gene_name2", ...]} show gene name in plot.
-        gene_names_size: font size of gene name. 
-        gene_names_color: font color of gene name. 
-        point_color: point color.
-        line_color: strand line color.
-        point_size: point size.
-        title: title of plot.
-        xlabel: xlabel of plot.
-        ylabel: ylabel of plot.
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+        x_axis: str 
+            A sequence indices.
+        
+        y_axis: str
+            A sequence indices.
+        
+        figsize: tuple, default=None
+            Figure size.
+        
+        show_gene_names: bool, or list, default=False
+            Show gene name in plot. A list include of gene name, or bool value.
+            
+        gene_names_size: float, default=10
+            Font size of gene name.
+            
+        gene_names_color: str, default="#0A0A0A"
+            Font color of gene name. 
+            
+        point_color: str, default="#4F845C",
+            Point color.
+            
+        line_color: str, default="#C25759",
+            Strand line color.
+            
+        point_size: float, default=20
+            Point size.
+
+        title: str, default=None
+            Title of figture.
+            
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         
         xs = self.indices_df[x_axis].tolist()
@@ -5665,14 +7002,29 @@ class Sequence_Indices_Analysis():
         
         Parameters
         ----------
-        x_axis: {str} A sequence indices.
-        figsize: figure size.
-        color: bar color.
-        title: title of plot.
-        xlabel: xlabel of plot.
-        ylabel: ylabel of plot.
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+        x_axis: str 
+            A sequence indices.
+        
+        figsize: tuple, default=None
+            Figure size.
+            
+        color: str, default=None
+            Bar color.
+        
+        title: str, default=None
+            Title of figture.
+            
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
         xs = self.indices_df[x_axis].tolist()
         if ax == None:
@@ -5704,15 +7056,31 @@ class Sequence_Indices_Analysis():
         
         Parameters
         ----------
-        x_axis: {str} A sequence indices.
-        figsize: figure size.
-        color: line color.
-        title: title of plot.
-        xlabel: xlabel of plot.
-        ylabel: ylabel of plot.
-        ax: {None, Aexs}
-        outfile: A path of outfile.
+        x_axis: str 
+            A sequence indices.
+        
+        figsize: tuple, default=None
+            Figure size.
+            
+        color: str, default=None
+            Line color.
+        
+        title: str, default=None
+            Title of figture.
+            
+        xlabel: str, default=None
+            X-axis label of figtrue.
+            
+        ylabel: str, default=None
+            Y-axis label of figtrue.
+            
+     	ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    	outfile: str, default=None
+            A path of outfile.
         """
+        
         xs = self.indices_df[x_axis].tolist()
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)

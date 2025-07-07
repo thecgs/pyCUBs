@@ -7,11 +7,17 @@ __version__ = "v0.01"
 
 import gzip
 
-def FastaIO(file:str):
+def FastaIO(file):
     """
-    Read a fasta file path and support compressed files ending in ".gz", 
-    or accept a handle of "_io.TextIOWrapper" class.
+    Description 
+    ----------
+    Reads the Fasta format file and returns a generator.
+    
+    Parameters
+    ----------
+    file: {str} Read a fasta file path and support compressed files ending in ".gz", or accept a handle of "_io.TextIOWrapper" class.
     """
+    
     if isinstance(file, str):
         if file.endswith('.gz'):
             handle = gzip.open(file, 'rt')
