@@ -11,10 +11,10 @@ setup(name="pycubs",
       packages=find_packages(exclude=["example", ".github"]),
       keywords=['bioinformatics', 'codon usage bias', 'codonW', 'cusp'],
       install_requires=["scipy>=1.10.1",
-                        "skbio>=0.6.3",
-                        "numpy>=1.26.3",
-                        "pandas>=2.2.2",
+                        "scikit-bio>=0.6.3",
+                        "numpy>=1.24.4",
+                        "pandas>=2.0.3",
                         "prince>=0.13.0",
                         "seaborn>=0.13.1",
-                        "matplotlib>=3.8.2"]
+                        "matplotlib>=3.7.5"]
      )
