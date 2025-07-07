@@ -1,9 +1,9 @@
 from .pycubcore import AA_Composition_Multiple_Species_Analysis, AA_Composition_Single_Species_Analysis, ENC_Analysis, NPA_Analysis, PR2_Analysis, RSCU_Multiple_Species_Analysis, RSCU_Single_Species_Analysis, Sequence_Indices_Analysis, Stop_Codon_Analysis, TreePlotter, draw_codon_barplot, find_four_codon_AA, get_ATGC_Indices, get_Aromo, get_CAI, get_CBI, get_ENC, get_Fop, get_Fraction, get_Frequency, get_Gravy, get_Obs, get_Obs_from_CUBE_file, get_Obs_from_emboss_cutfile, get_PR2, get_RSCU, get_Relative_Adaptiveness, get_base_phase_synonymous, get_codonW_like, get_codonw_caifile_from_Obs, get_cusp_like, get_emboss_cutfile_from_Obs, get_optimal_codons_from_ENC, get_optimal_codons_from_codonw_coafile, translate
-from .fastaio import FastaIO
+from .fastaio import fastaIO
 from .codontables import CodonTables
 
 __author__ = "Author: Guisen Chen; Email: thecgs001@foxmail.com; Date: 2025/07/05"
-__all__ = ["FastaIO",
+__all__ = ["fastaIO",
            "CodonTables",
            "translate",
            "get_Obs",

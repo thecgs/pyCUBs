@@ -49,7 +49,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as ss
-from .fastaio import FastaIO
+from .fastaio import fastaIO
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch, Rectangle
@@ -94,21 +94,21 @@ def get_Obs(seqences, genetic_code, aaseq3=True):
         A sequence string, or a sequences list, or a fasta or fasta.gz format file path.
     
     genetic_code: int
-    	A genetic code id, use `pycubs.CodonTables()` for more details.
+        A genetic code id, use `pycubs.CodonTables()` for more details.
     
     aaseq3: bool, default=True
-    	If the value is True, the amino acid uses a three-letter code.
+        If the value is True, the amino acid uses a three-letter code.
     """
     
     codontable = CodonTables().get(genetic_code, aaseq3)
     
-    def _FastaIO(file):
-        for ID, Seq in FastaIO(file):
+    def _fastaIO(file):
+        for ID, Seq in fastaIO(file):
             yield Seq
     
     if isinstance(seqences, str):
         if os.path.exists(seqences):
-            seqences = _FastaIO(seqences)
+            seqences = _fastaIO(seqences)
         else:
             seqences = [seqences.upper()]
             
@@ -154,7 +154,7 @@ def get_Fraction(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     
     Reference
     ----------
@@ -183,32 +183,32 @@ def get_Fraction(Obs):
             Parameters
             ----------
             figsize: tuple, default=(8,4)
-            	Figure size.
+                Figure size.
             
             ylabel: str, default=None
-            	Y-axis label of figure.
+                Y-axis label of figure.
             
             title: str, default=None
-            	Title of figure.
-            	
+                Title of figure.
+            
             width: float, default=0.9
-            	The bar spacing width.
-            	
+                The bar spacing width.
+            
             palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
-            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
-            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+                Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+                Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
             
             remove_stop_codon: bool, default=None
-            	If remove stop codon.
+                If remove stop codon.
             
             ax: matplotlib Axes, default=None
-            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+                Axes object to draw the plot onto, otherwise uses the current Axes.   
             
             codon_space: float, default=0.16
-            	codon spacing.
+                codon spacing.
             
             outfile: str, default=None
-            	A path of outfile.
+                A path of outfile.
             """
             draw_codon_barplot(self.Fraction_dict, ylabel=ylabel, title=title, 
                                palette=palette, width=width,
@@ -257,7 +257,7 @@ def get_Frequency(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     
     Reference
     ----------
@@ -287,32 +287,32 @@ def get_Frequency(Obs):
             Parameters
             ----------
             figsize: tuple, default=(8,4)
-            	Figure size.
+                Figure size.
             
             ylabel: str, default=None
-            	Y-axis label of figure.
+                Y-axis label of figure.
             
             title: str, default=None
-            	Title of figure.
-            	
+                Title of figure.
+            
             width: float, default=0.9
-            	The bar spacing width.
-            	
+                The bar spacing width.
+            
             palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
-            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
-            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+                Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+                Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
             
             remove_stop_codon: bool, default=None
-            	If remove stop codon.
+                If remove stop codon.
             
             ax: matplotlib Axes, default=None
-            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+                Axes object to draw the plot onto, otherwise uses the current Axes.   
             
             codon_space: float, default=0.16
-            	codon spacing.
+                codon spacing.
             
             outfile: str, default=None
-            	A path of outfile.
+                A path of outfile.
             """
             draw_codon_barplot(self.Frequency_dict, ylabel=ylabel, title=title, 
                                palette=palette, width=width,
@@ -356,7 +356,7 @@ def get_Relative_Adaptiveness(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     
     Reference
     ----------
@@ -384,32 +384,32 @@ def get_Relative_Adaptiveness(Obs):
             Parameters
             ----------
             figsize: tuple, default=(8,4)
-            	Figure size.
+                Figure size.
             
             ylabel: str, default=None
-            	Y-axis label of figure.
+                Y-axis label of figure.
             
             title: str, default=None
-            	Title of figure.
-            	
+                Title of figure.
+            
             width: float, default=0.9
-            	The bar spacing width.
-            	
+                The bar spacing width.
+            
             palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
-            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
-            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+                Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+                Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
             
             remove_stop_codon: bool, default=None
-            	If remove stop codon.
+                If remove stop codon.
             
             ax: matplotlib Axes, default=None
-            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+                Axes object to draw the plot onto, otherwise uses the current Axes.   
             
             codon_space: float, default=0.16
-            	codon spacing.
+                Codon spacing.
             
             outfile: str, default=None
-            	A path of outfile.
+                A path of outfile.
             """
             draw_codon_barplot(self.Relative_Adaptiveness_dict, ylabel=ylabel, title=title, 
                                palette=palette, width=width,
@@ -458,12 +458,12 @@ def get_RSCU(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     
     Reference
     ----------
     [1] Sharp, Paul M., Therese MF Tuohy, and Krzysztof R. Mosurski. "Codon usage in yeast: cluster analysis clearly differentiates highly 
-    	and lowly expressed genes." Nucleic acids research 14.13 (1986): 5125-5143.
+        and lowly expressed genes." Nucleic acids research 14.13 (1986): 5125-5143.
     """
     
     class RSCU():
@@ -486,34 +486,33 @@ def get_RSCU(Obs):
             Draw a codons barplot.
 
             Parameters
-            ----------            	
+            ----------
             figsize: tuple, default=(8,4)
-            	Figure size.
+                Figure size.
             
             ylabel: str, default=None
-            	Y-axis label of figure.
+                Y-axis label of figure.
             
             title: str, default=None
-            	Title of figure.
-            	
+                Title of figure.
+            
             width: float, default=0.9
-            	The bar spacing width.
-            	
+                The bar spacing width.
+            
             palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
-            	Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
-            	Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
+                Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
+                Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
             
             remove_stop_codon: bool, default=None
-            	If remove stop codon.
+                If remove stop codon.
             
             ax: matplotlib Axes, default=None
-            	Axes object to draw the plot onto, otherwise uses the current Axes.   
+                Axes object to draw the plot onto, otherwise uses the current Axes.   
             
             codon_space: float, default=0.16
-            	codon spacing.
+                Codon spacing.
             
             outfile: str, default=None
-            	A path of outfile.
             """
             draw_codon_barplot(self.RSCU_dict, ylabel=ylabel, title=title, 
                                palette=palette, width=width,
@@ -728,7 +727,7 @@ def get_ATGC_Indices(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     """
     ATGC1 = defaultdict(int)
     ATGC2 = defaultdict(int)
@@ -881,8 +880,8 @@ def get_codonw_caifile_from_Obs(Obs, outfile=None):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
-    	
+        get_Obs() function return value.
+    
     outfile: str, default=None
         A path of outfile.
         
@@ -921,8 +920,8 @@ def get_emboss_cutfile_from_Obs(Obs, outfile=None):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
-    	
+        get_Obs() function return value.
+    
     outfile: str, default=None
         A path of outfile.
     
@@ -963,11 +962,11 @@ def get_Obs_from_emboss_cutfile(file, aaseq3=True):
     Parameters
     ----------
     file: str
-    	A emboss cut file.
+        A emboss cut file.
     
     aaseq3: bool, default=True
-    	If the value is True, the amino acid uses a three-letter code.
-    	
+        If the value is True, the amino acid uses a three-letter code.
+    
     Reference
     ----------
     [1] Cusp website: https://www.bioinformatics.nl/cgi-bin/emboss/cusp
@@ -1000,10 +999,10 @@ def get_Obs_from_CUBE_file(file, aaseq3=True):
     Parameters
     ----------
     file: str
-    	A CUBE file from https://www.codonbias.cn/download
+        A CUBE file from https://www.codonbias.cn/download
     
     aaseq3: bool, default=True
-    	If the value is True, the amino acid uses a three-letter code.
+        If the value is True, the amino acid uses a three-letter code.
     """
     
     Seq1toSeq3 = {Seq3toSeq1[k]:k for k in Seq3toSeq1}
@@ -1041,7 +1040,7 @@ def get_optimal_codons_from_codonw_coafile(file):
     Parameters
     ----------
     file: str
-    	The file include of optimal codons generated by codonw software. such as cbi.coa, and fop.coa.
+        The file include of optimal codons generated by codonw software. such as cbi.coa, and fop.coa.
     
     Reference
     ----------
@@ -1073,20 +1072,20 @@ def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_
     Parameters
     ----------
     file: str
-    	A fasta or fasta.gz format file path.
+        A fasta or fasta.gz format file path.
     
     genetic_code: int
-    	A genetic code id, use `pycubs.CodonTables()` for more details.
+        A genetic code id, use `pycubs.CodonTables()` for more details.
     
     ratio: float, default=0.1
-    	How many sequences were selected from the genes with high and low ENC values to establish low and high bias gene groups. 
-    	The range of values is 0-1.
-    	
+        How many sequences were selected from the genes with high and low ENC values to establish low and high bias gene groups. 
+        The range of values is 0-1.
+    
     rscu: float, default=1
-    	Lower limit of RSCU in low ENC group. The range of values is 0-6.
-    	
+        Lower limit of RSCU in low ENC group. The range of values is 0-6.
+    
     delta_rscu: float, default=0.08
-    	Delta RSCU = RSCU in low ENC group - RSCU in high ENC group
+        Delta RSCU = RSCU in low ENC group - RSCU in high ENC group
     
     Reference
     ----------
@@ -1096,7 +1095,7 @@ def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_
     """
     
     ENC_dict = {}
-    for ID, Seq in FastaIO(file):
+    for ID, Seq in fastaIO(file):
         Obs = get_Obs(Seq, genetic_code=genetic_code)
         enc = get_ENC(Obs)
         if enc != None:
@@ -1108,7 +1107,7 @@ def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_
     low_enc_seq_list = []
     high_enc_seq_list = []
     
-    for ID, Seq in FastaIO(file):
+    for ID, Seq in fastaIO(file):
         if ID in ENC_dict:
             if ENC_dict[ID] >= high_enc_critical_value:
                 high_enc_seq_list.append(Seq)
@@ -1153,15 +1152,15 @@ def get_Fop(Obs, optimal_codons="Escherichia coli"):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     
     optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
-    	It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
-    	or return value from get_optimal_codons_from_ENC() function,
-    	or it can be a custom list containing the best codons,
-    	or it can be a preset value from the codonw software, such as "Escherichia coli",
-    	"Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
-    	"Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+        It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+        or return value from get_optimal_codons_from_ENC() function,
+        or it can be a custom list containing the best codons,
+        or it can be a preset value from the codonw software, such as "Escherichia coli",
+        "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+        "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
         
     Reference
     ----------
@@ -1214,15 +1213,15 @@ def get_CBI(Obs, optimal_codons="Escherichia coli"):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     
     optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
-    	It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
-    	or return value from get_optimal_codons_from_ENC() function,
-    	or it can be a custom list containing the best codons,
-    	or it can be a preset value from the codonw software, such as "Escherichia coli",
-    	"Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
-    	"Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+        It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+        or return value from get_optimal_codons_from_ENC() function,
+        or it can be a custom list containing the best codons,
+        or it can be a preset value from the codonw software, such as "Escherichia coli",
+        "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+        "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
                      
     Reference
     ----------
@@ -1274,22 +1273,22 @@ def get_CAI(Obs, ref_Obs="Escherichia coli", model="codonw", genetic_code=None):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value. 
-    	Observed number of occurrences of codon in a query gene.
+        get_Obs() function return value. 
+        Observed number of occurrences of codon in a query gene.
     
     ref_Obs: str, dict, default="Escherichia coli"
-    	get_Obs() function return value.
-    	Observed number of occurrences of codon in a reference set of genes.
+        get_Obs() function return value.
+        Observed number of occurrences of codon in a reference set of genes.
         Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
     
     model: str, default="codonw",
-    	If model==emboss, Non-synonymous codons and termination codons (dependent on genetic code) are unexcluded. 
+        If model==emboss, Non-synonymous codons and termination codons (dependent on genetic code) are unexcluded. 
         If model==codonw, Non-synonymous codons and termination codons (dependent on genetic code) are excluded. 
     
     References
     ----------
     [1] Sharp, Paul M., and Wen-Hsiung Li. "The codon adaptation index-a measure of directional synonymous codon usage bias,
-    	and its potential applications." Nucleic acids research 15.3 (1987): 1281-1295.
+        and its potential applications." Nucleic acids research 15.3 (1987): 1281-1295.
     """
     
     if isinstance(ref_Obs, str):
@@ -1331,12 +1330,12 @@ def get_Gravy(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value. 
+        get_Obs() function return value. 
     
     Reference
     ----------
     [1] Kyte, Jack, and Russell F. Doolittle. "A simple method for displaying the hydropathic character of a protein."
-    	Journal of molecular biology 157.1 (1982): 105-132.
+        Journal of molecular biology 157.1 (1982): 105-132.
     [2] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
     """
     
@@ -1362,7 +1361,7 @@ def get_Aromo(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value. 
+        get_Obs() function return value. 
     
     Reference
     ----------
@@ -1387,13 +1386,13 @@ def get_cusp_like(Obs, human_format=False, outfile=None):
     Parameters
     ----------  
     Obs: dict
-    	get_Obs() function return value.
-    	
+        get_Obs() function return value.
+    
     human_format: bool, default=False
-    	If value is True, return human readable format.
+        If value is True, return human readable format.
     
     outfile: str, default=None
-    	A path of outfile.
+        A path of outfile.
     
     Reference
     ----------
@@ -1447,26 +1446,26 @@ def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optima
     Parameters
     ----------
     file: str
-    	A fasta or fasta.gz format file path.
-    	
+        A fasta or fasta.gz format file path.
+    
     genetic_code: int
-    	A genetic code id, use `pycubs.CodonTables()` for more details.
-    	
+        A genetic code id, use `pycubs.CodonTables()` for more details.
+        
     cai_ref_Obs: str, dict, default="Escherichia coli"
-    	get_Obs() function return value.
-    	Observed number of occurrences of codon in a reference set of genes.
+        get_Obs() function return value.
+        Observed number of occurrences of codon in a reference set of genes.
         Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
         
     optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
-    	It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
-    	or return value from get_optimal_codons_from_ENC() function,
-    	or it can be a custom list containing the best codons,
-    	or it can be a preset value from the codonw software, such as "Escherichia coli",
-    	"Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
-    	"Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
-    	
+        It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+        or return value from get_optimal_codons_from_ENC() function,
+        or it can be a custom list containing the best codons,
+        or it can be a preset value from the codonw software, such as "Escherichia coli",
+        "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+        "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+    
     outfile: str, default=None
-    	A path of outfile.
+        A path of outfile.
     
     Reference
     ----------
@@ -1475,7 +1474,7 @@ def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optima
     
     #GCn3 = (GC - G3s -C3s )/(L_aa *3 - L_sym)
     tmp = []
-    for record in FastaIO(file):
+    for record in fastaIO(file):
         Obs = get_Obs(record[1], genetic_code=genetic_code)
         CAI = get_CAI(Obs, ref_Obs=cai_ref_Obs, model="codonw", genetic_code=genetic_code)
         Fop = get_Fop(Obs, optimal_codons)
@@ -1516,11 +1515,13 @@ def get_base_phase_synonymous(Obs, base=["A", "T", "G", "C"][2], phase=[0,1,2][2
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
+        
     base: {A, T, G, C}, default="G"
-    	Four base types.
+        Four base types.
+        
     phase: {0, 1, 2}, default=2
-    	Codon phase, starting at 0.
+        Codon phase, starting at 0.
     
     Example
     ----------
@@ -1561,7 +1562,7 @@ def get_ENC(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     
     Reference
     ----------
@@ -1643,7 +1644,7 @@ def find_four_codon_AA(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
     """
     
     four_codon_AA = {}
@@ -1669,7 +1670,7 @@ def get_PR2(Obs):
     Parameters
     ----------
     Obs: dict
-    	get_Obs() function return value.
+        get_Obs() function return value.
         
     Reference
     ----------
@@ -1713,7 +1714,7 @@ def get_PR2(Obs):
 
 class NPA_Analysis():
     def __init__(self, file, genetic_code, sym=True):
-    	"""
+        """
         Description
         ----------
         Neutral plot analysis.
@@ -1722,9 +1723,9 @@ class NPA_Analysis():
         ----------
         file: str
             A fasta or fasta.gz format file include of CDS seqence.
-    	
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+            
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
         
         sym: bool, default=True
             Only synonymous codons model,
@@ -1736,7 +1737,7 @@ class NPA_Analysis():
         GC3 = []
         GC12 = []
         GeneName = []
-        for ID, Seq in FastaIO(file):
+        for ID, Seq in fastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
             res = get_ATGC_Indices(Obs)
             if sym == True:
@@ -1787,7 +1788,7 @@ class NPA_Analysis():
             return df
         
     def draw_NPA_plot(self, 
-    		      figsize=(6,4),
+                      figsize=(6,4),
                       show_gene_names=False,
                       gene_names_size=10,
                       gene_names_color="#0A0A0A",
@@ -1807,7 +1808,7 @@ class NPA_Analysis():
 
         Parameters
         ----------
-    	figsize: tuple, default=(6,4)
+        figsize: tuple, default=(6,4)
             Figure size.
         
         show_gene_names: bool, or list, default=False
@@ -1837,10 +1838,10 @@ class NPA_Analysis():
         ylabel: str, default=None
             Y-axis label of figtrue.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         xs = self.GC3
@@ -1903,15 +1904,15 @@ class ENC_Analysis():
         ----------
         file: str
             A fasta or fasta.gz format file include of CDS seqence.
-    	
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         ys = []
         xs = []
         GeneName = []
-        for ID, Seq in FastaIO(file):
+        for ID, Seq in fastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
             xs.append(get_ATGC_Indices(Obs)["GC3s"])
             try:
@@ -1958,7 +1959,7 @@ class ENC_Analysis():
 
         Parameters
         ----------
-    	figsize: tuple, default=(6,4)
+        figsize: tuple, default=(6,4)
             Figure size.
         
         show_gene_names: bool, or list, default=False
@@ -1988,10 +1989,10 @@ class ENC_Analysis():
         ylabel: str, default=None
             Y-axis label of figtrue.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         def gc2enc(value):
@@ -2043,9 +2044,9 @@ class PR2_Analysis():
         ----------
         file: str
             A fasta or fasta.gz format file include of CDS seqence.
-    	
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
 
         Reference
         ----------
@@ -2058,7 +2059,7 @@ class PR2_Analysis():
         ys = []
         xs = []
         GeneName = []
-        for ID, Seq in FastaIO(file):
+        for ID, Seq in fastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
             res = get_PR2(Obs)
             ys.append(res["A3/(A3+T3)|4"])
@@ -2103,7 +2104,7 @@ class PR2_Analysis():
 
         Parameters
         ----------
-    	figsize: tuple, default=(6,4)
+        figsize: tuple, default=(6,4)
             Figure size.
         
         show_gene_names: bool, or list, default=False
@@ -2133,10 +2134,10 @@ class PR2_Analysis():
         ylabel: str, default=None
             Y-axis label of figtrue.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         ys = self.X_axis
@@ -2185,13 +2186,13 @@ class RSCU_Single_Species_Analysis():
         ----------
         file: str
             A fasta or fasta.gz format file include of CDS seqence.
-    	
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         df_list = []
-        for name, seq in FastaIO(file):
+        for name, seq in fastaIO(file):
             RSCU = get_RSCU(get_Obs(seq, genetic_code=genetic_code))
             df_list.append(pd.DataFrame({name:{(aa,c):RSCU.RSCU_dict[aa][c] for aa in RSCU.RSCU_dict for c in RSCU.RSCU_dict[aa]}}))
         df = pd.concat(df_list, axis=1)
@@ -2246,7 +2247,7 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         PCA_df = self.pca.column_correlations
@@ -2266,7 +2267,7 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -2317,7 +2318,7 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-    	figsize: tuple, default=(6,4)
+        figsize: tuple, default=(6,4)
             Figure size.
             
         gene_labels_color: str, default="black"
@@ -2386,10 +2387,10 @@ class RSCU_Single_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -2532,7 +2533,7 @@ class RSCU_Single_Species_Analysis():
 
         Parameters
         ----------
-     	figsize: tuple, default=(6,6)
+        figsize: tuple, default=(6,6)
             Figure size.
         
         labels_color: str, default="black"
@@ -2583,12 +2584,13 @@ class RSCU_Single_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
-         """
+        """
+        
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
         
@@ -2715,10 +2717,10 @@ class RSCU_Single_Species_Analysis():
         show_xlabels: bool, default=True
              Show Y-axis label of figtrue.
              
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -2789,7 +2791,7 @@ class RSCU_Single_Species_Analysis():
         col_cluster: bool, default=True
             Clustering cols.
         
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -2834,10 +2836,10 @@ class RSCU_Single_Species_Analysis():
         fontsize: float, default=10
             Font size of labels.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -2885,12 +2887,13 @@ class RSCU_Single_Species_Analysis():
         labels_fontsize: float, default=10
             Font size of labels.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
+        
         if figsize == None:
             figsize = (self.RSCU_df.shape[1]/4+1, self.RSCU_df.shape[1]/4)
         if ax == None:
@@ -2914,9 +2917,10 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
+        
         fig, axs = plt.subplots(len(self.RSCUs_dict),
                                 figsize=(8, len(self.RSCUs_dict)*4))
         fig.subplots_adjust(hspace=0.8)
@@ -3075,10 +3079,10 @@ class RSCU_Single_Species_Analysis():
         width: float, default=10
             Figure width.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3110,8 +3114,8 @@ class RSCU_Multiple_Species_Analysis():
         data: tuple, such as: [("species name1", "cds file1 path"), ("species name2", "cds file2 path"), ...]
             CDS files for a set of species.
         
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         single_codon_amino_acids = set()
@@ -3178,7 +3182,7 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         PCA_df = self.pca.column_correlations
@@ -3198,7 +3202,7 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3250,7 +3254,7 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-    	figsize: tuple, default=(6,4)
+        figsize: tuple, default=(8,8)
             Figure size.
             
         species_labels_color: str, default="black"
@@ -3319,10 +3323,10 @@ class RSCU_Multiple_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3465,7 +3469,7 @@ class RSCU_Multiple_Species_Analysis():
 
         Parameters
         ----------
-     	figsize: tuple, default=(6,6)
+        figsize: tuple, default=(6,6)
             Figure size.
         
         labels_color: str, default="black"
@@ -3516,10 +3520,10 @@ class RSCU_Multiple_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3650,10 +3654,10 @@ class RSCU_Multiple_Species_Analysis():
         show_xlabels: bool, default=True
              Show Y-axis label of figtrue.
              
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3725,7 +3729,7 @@ class RSCU_Multiple_Species_Analysis():
         col_cluster: bool, default=True
             Clustering cols.
         
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3771,10 +3775,10 @@ class RSCU_Multiple_Species_Analysis():
         fontsize: float, default=10
             Font size of labels.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3822,10 +3826,10 @@ class RSCU_Multiple_Species_Analysis():
         labels_fontsize: float, default=10
             Font size of labels.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -3852,7 +3856,7 @@ class RSCU_Multiple_Species_Analysis():
         
         Parameters
         ----------
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4014,10 +4018,10 @@ class RSCU_Multiple_Species_Analysis():
         width: float, default=10
             Figure width.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method)
@@ -4046,15 +4050,15 @@ class AA_Composition_Single_Species_Analysis():
         ----------
         file: str
             A fasta or fasta.gz format file include of CDS seqence.
-    	
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
         
         AA_count_list = []
-        for ID, Seq in FastaIO(file):
+        for ID, Seq in fastaIO(file):
             AA_count = {'Gly':0, 'Ala':0, 'Val':0, 'Leu':0, 'Ile':0,
                         'Glu':0, 'Gln':0, 'Asp':0, 'Asn':0, 'Met':0,
                         'Ser':0, 'Thr':0, 'Phe':0, 'Trp':0, 'Tyr':0,
@@ -4107,8 +4111,8 @@ class AA_Composition_Single_Species_Analysis():
         ----------
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
-    	
-    	outfile: str, default=None
+        
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4136,8 +4140,8 @@ class AA_Composition_Single_Species_Analysis():
         ----------
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
-    	
-    	outfile: str, default=None
+        
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4211,10 +4215,10 @@ class AA_Composition_Single_Species_Analysis():
         show_xlabels: bool, default=True
              Show Y-axis label of figtrue.
              
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4294,7 +4298,7 @@ class AA_Composition_Single_Species_Analysis():
         col_cluster: bool, default=True
             Clustering cols.
         
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4348,10 +4352,10 @@ class AA_Composition_Single_Species_Analysis():
         fontsize: float, default=10
             Font size of labels.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4411,10 +4415,10 @@ class AA_Composition_Single_Species_Analysis():
         labels_fontsize: float, default=10
             Font size of labels.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4474,7 +4478,7 @@ class AA_Composition_Single_Species_Analysis():
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
             
-    	figsize: tuple, default=(8,8)
+        figsize: tuple, default=(8,8)
             Figure size.
             
         gene_labels_color: str, default="black"
@@ -4543,10 +4547,10 @@ class AA_Composition_Single_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4693,7 +4697,7 @@ class AA_Composition_Single_Species_Analysis():
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
             
-     	figsize: tuple, default=(6,6)
+        figsize: tuple, default=(6,6)
             Figure size.
         
         labels_color: str, default="black"
@@ -4744,10 +4748,10 @@ class AA_Composition_Single_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -4999,10 +5003,10 @@ class AA_Composition_Single_Species_Analysis():
         width: float, default=10
             Figure width.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         tree = self.get_tree(metric=metric, outgroup=outgroup, tree_method=tree_method, dtype=dtype)
@@ -5033,8 +5037,8 @@ class AA_Composition_Multiple_Species_Analysis():
         data: tuple, such as: [("species name1", "cds file1 path"), ("species name2", "cds file2 path"), ...]
             CDS files for a set of species.
         
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         
         Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
@@ -5042,7 +5046,7 @@ class AA_Composition_Multiple_Species_Analysis():
         AA_count_dict = {}
         for prefix, file in data:
             AA_count = defaultdict(int)
-            for ID, Seq in FastaIO(file):
+            for ID, Seq in fastaIO(file):
                 for i in translate(Seq, genetic_code=genetic_code):
                     AA_count[i] = AA_count[i] + 1
                     
@@ -5091,8 +5095,8 @@ class AA_Composition_Multiple_Species_Analysis():
         ----------
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
-    	
-    	outfile: str, default=None
+        
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -5120,8 +5124,8 @@ class AA_Composition_Multiple_Species_Analysis():
         ----------
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
-    	
-    	outfile: str, default=None
+        
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -5195,10 +5199,10 @@ class AA_Composition_Multiple_Species_Analysis():
         show_xlabels: bool, default=True
              Show Y-axis label of figtrue.
              
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -5278,7 +5282,7 @@ class AA_Composition_Multiple_Species_Analysis():
         col_cluster: bool, default=True
             Clustering cols.
         
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -5332,10 +5336,10 @@ class AA_Composition_Multiple_Species_Analysis():
         fontsize: float, default=10
             Font size of labels.
         
-     	ax: matplotlib Axes, default=None
+         ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         if dtype == "Fraction":
@@ -5395,10 +5399,10 @@ class AA_Composition_Multiple_Species_Analysis():
         labels_fontsize: float, default=10
             Font size of labels.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -5458,7 +5462,7 @@ class AA_Composition_Multiple_Species_Analysis():
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
             
-    	figsize: tuple, default=(6,4)
+        figsize: tuple, default=(6,4)
             Figure size.
             
         species_labels_color: str, default="black"
@@ -5527,10 +5531,10 @@ class AA_Composition_Multiple_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -5678,7 +5682,7 @@ class AA_Composition_Multiple_Species_Analysis():
         dtype: {"Fraction", "Count"} default="Fraction"
             Choose to use amino acid composition Count or Fraction.
             
-     	figsize: tuple, default=(6,6)
+        figsize: tuple, default=(6,6)
             Figure size.
         
         labels_color: str, default="black"
@@ -5729,10 +5733,10 @@ class AA_Composition_Multiple_Species_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         if dtype == "Fraction":
@@ -5983,10 +5987,10 @@ class AA_Composition_Multiple_Species_Analysis():
         width: float, default=10
             Figure width.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -6018,15 +6022,15 @@ class Stop_Codon_Analysis():
         data: tuple, such as: [("species name1", "cds file1 path"), ("species name2", "cds file2 path"), ...]
             CDS files for a set of species.
         
-    	genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
+        genetic_code: int
+            A genetic code id, use `pycubs.CodonTables()` for more details.
         """
         StopCodon_Count_dict = {}
         GeneName2StopCodon_dict = {}
         for prefix, file in data:
             StopCodon_Count = defaultdict(int)
             GeneName2StopCodon = {}
-            for ID, Seq in FastaIO(file):
+            for ID, Seq in fastaIO(file):
                 if len(Seq) % 3 == 0:
                     codon = Seq[-3:]
                     if translate(codon, genetic_code=genetic_code) == "*":
@@ -6060,17 +6064,17 @@ class Stop_Codon_Analysis():
         self.pca = pca.fit(self.StopCodon_Count_df)
         
     def get_df(self):
-	"""
+        """
         Description
         ----------
         Return a dataframe of Stop codon analysis.
         
         Parameters
         ----------
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
-	"""
-	
+        """
+        
         return pd.melt(self.StopCodon_Count_df.reset_index(), id_vars="Stop Codon", value_name="Count", var_name="Group")
         
     def draw_barplot(self, figsize=None, ax=None, palette="Blues", legend_font_style="italic", legend_font_size=10, outfile=None):
@@ -6084,7 +6088,7 @@ class Stop_Codon_Analysis():
         figsize: tuple, default=None
             Figure size.
             
-    	palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
+        palette: palette name, or list, default=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"]
             Colors to use for the different levels of the `hue` variable. Should be something that can be interpreted by :func:`color_palette`.
             Reference value: Set1, Set2, Set3, tab10, tab20, tab20b, tab20c, Dark2.
         
@@ -6094,10 +6098,10 @@ class Stop_Codon_Analysis():
         legend_font_size: 10
             Font size of legend.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -6163,7 +6167,7 @@ class Stop_Codon_Analysis():
         col_cluster: bool, default=True
             Clustering cols.
         
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -6205,10 +6209,10 @@ class Stop_Codon_Analysis():
         fontsize: float, default=10
             Font size of labels.
         
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -6250,7 +6254,7 @@ class Stop_Codon_Analysis():
 
         Parameters
         ----------
-     	figsize: tuple, default=(6,6)
+        figsize: tuple, default=(6,6)
             Figure size.
         
         labels_color: str, default="black"
@@ -6301,10 +6305,10 @@ class Stop_Codon_Analysis():
         ylabel_size: float, default=12
             Y-axis label font size of figture.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
             
         """
@@ -6585,10 +6589,10 @@ class TreePlotter:
         
         Parameters
         ----------
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         
         Returns
@@ -6779,23 +6783,23 @@ class Sequence_Indices_Analysis():
         Parameters
         ----------
         file: str
-    	    A fasta or fasta.gz format file path.
-    	
+            A fasta or fasta.gz format file path.
+        
         genetic_code: int
-    	    A genetic code id, use `pycubs.CodonTables()` for more details.
-    	
+            A genetic code id, use `pycubs.CodonTables()` for more details.
+        
         cai_ref_Obs: str, dict, default="Escherichia coli"
-    	    get_Obs() function return value.
-    	    Observed number of occurrences of codon in a reference set of genes.
+            get_Obs() function return value.
+            Observed number of occurrences of codon in a reference set of genes.
             Or is preset, such as "Escherichia coli", "Bacillus subtilis", "Saccharomyces cerevisiae"
         
         optimal_codons: list, pd.DateFrame, str, default="Escherichia coli"
-    	    It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
-    	    or return value from get_optimal_codons_from_ENC() function,
-    	    or it can be a custom list containing the best codons,
-    	    or it can be a preset value from the codonw software, such as "Escherichia coli",
-    	    "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
-    	    "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+            It can be the return value from the get_optimal_codons_from_codonw_coafile() function, 
+            or return value from get_optimal_codons_from_ENC() function,
+            or it can be a custom list containing the best codons,
+            or it can be a preset value from the codonw software, such as "Escherichia coli",
+            "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
+            "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
         """
         tmp = []
         index = ['A', 'T', 'G', 'C', 'GC', 'AT', 'GC-skew', 'AT-skew',
@@ -6807,7 +6811,7 @@ class Sequence_Indices_Analysis():
                  'A3s', 'T3s', 'G3s', 'C3s', 'GC3s', 'AT3s', 'GC12s',
                  'A3s codonW', 'T3s codonW', 'G3s codonW', 'C3s codonW', 'L_sym', 'L_aa',
                  'Aromaticity', 'Hydropathicity', 'ENC', 'CAI', 'CBI', 'Fop']
-        for name, seq in FastaIO(file):
+        for name, seq in fastaIO(file):
             Obs = get_Obs(seq, genetic_code=genetic_code)
             Indices = get_ATGC_Indices(Obs)
             Indices["Aromaticity"] = get_Aromo(Obs)
@@ -6850,10 +6854,10 @@ class Sequence_Indices_Analysis():
         labels_fontsize: float, default=10
             Font size of labels.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
             
         indices: str, list, default="all"
@@ -6938,10 +6942,10 @@ class Sequence_Indices_Analysis():
         ylabel: str, default=None
             Y-axis label of figtrue.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
@@ -7020,12 +7024,13 @@ class Sequence_Indices_Analysis():
         ylabel: str, default=None
             Y-axis label of figtrue.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
+        
         xs = self.indices_df[x_axis].tolist()
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
@@ -7074,10 +7079,10 @@ class Sequence_Indices_Analysis():
         ylabel: str, default=None
             Y-axis label of figtrue.
             
-     	ax: matplotlib Axes, default=None
+        ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
-    	outfile: str, default=None
+        outfile: str, default=None
             A path of outfile.
         """
         
