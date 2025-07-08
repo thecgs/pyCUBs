@@ -176,7 +176,6 @@ def get_Fraction(Obs):
                          width=0.9,
                          palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
                          remove_stop_codon=True,
-                         figsize=(8,4),
                          codon_space = 0.16,
                          ax=None,
                          outfile=None):
@@ -7186,9 +7185,10 @@ def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outf
             sequences.append(sequence[start: start + width*3])
         start += width*3
         
-    fig, axs = plt.subplots(len(sequences), 1, figsize=(width/2.3, 2.5*len(sequences)))
+    fig, axs = plt.subplots(len(sequences), 1, figsize=(width/2, 2.5*len(sequences)))
     plt.subplots_adjust(hspace=0.3)
     
+    max_CAI_sequence = ""
     for index, seq in enumerate(sequences):
         Obs = get_Obs(seq, genetic_code=genetic_code)
         seq_list = []
@@ -7198,7 +7198,7 @@ def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outf
 
         if len(sequences) == 1:
             axs = [axs]
-
+            
         axs[index].plot(range(0, len(x_labels)), [-1]*len(x_labels))
         axs[index].set_xticks(range(0, len(x_labels)))
         axs[index].set_xticklabels(x_labels)
@@ -7206,15 +7206,21 @@ def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outf
         axs[index].set_ylim(0, 7)
         axs[index].set_yticks([])
 
-        pos_dict = defaultdict(dict)
+        #pos_dict = defaultdict(dict)
         path = []
         for x, aa in enumerate(x_labels):
             for y, c in enumerate(sorted(ref_Obs[aa].keys(), key=lambda x: ref_Obs[aa][x], reverse=True)):
-                pos_dict[(x, aa)] = (y, c) 
+                #pos_dict[(x, aa)] = (y, c)
                 axs[index].text(x, y, s=c, ha='center', va='bottom')
+                if y==0:
+                    max_CAI_sequence += c
                 if seq_list[x] == c:
                     path.append((x, y))
-
+                if seq_list[x] not in ref_Obs[aa]:
+                    axs[index].text(x, len(ref_Obs[aa]), s=seq_list[x], ha='center', va='bottom', 
+                                    bbox=dict(facecolor='white', edgecolor='black'))
+                    path.append((x, len(ref_Obs[aa])))
+                    
         paths = []
         for i in range(len(path)):
             if i < len(path)-1:
@@ -7234,6 +7240,13 @@ def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outf
     axs[index].annotate('Raw CDS', xy=(path[-1][0], path[-1][1]+0.25), xytext=(path[-1][0] + 1, path[-1][1]+0.25), rotation=0, 
                 arrowprops=dict(color='#00A087FF', arrowstyle='-', connectionstyle='arc', alpha=0.5,
                                 shrinkA=0, shrinkB=0, linewidth=3))
+    
+    axs[index].text(0, -2.5, s="Note:", ha='center', va='bottom')
+    axs[index].text(1.5, -2.5, s="Codon", ha='center', va='bottom', bbox=dict(facecolor='white', edgecolor='black'))
+    axs[index].text(8.2, -2.5, s="inconsistent with the genetic code table of the target species.", ha='center', va='bottom')
+    
     if outfile != None:
             fig.savefig(outfile, dpi=600)
+            
+    print(f">max_CAI_sequence Length={len(max_CAI_sequence)}\n{max_CAI_sequence}")
     return None
