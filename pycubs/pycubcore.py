@@ -24,6 +24,7 @@ __all__ = ["translate",
            "get_optimal_codons_from_codonw_coafile",
            "get_optimal_codons_from_ENC",
            "draw_codon_barplot", 
+           "draw_codon_optimization_plot",
            "get_cusp_like",
            "get_codonW_like",
            "find_four_codon_AA",
@@ -42,6 +43,7 @@ __version__ = "v2.00"
 
 import os
 import io
+import re
 import sys
 import math
 import prince
@@ -49,6 +51,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as ss
+import urllib.request
 from .fastaio import fastaIO
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -999,36 +1002,51 @@ def get_Obs_from_CUBE_file(file, aaseq3=True):
     Parameters
     ----------
     file: str
-        A CUBE file from https://www.codonbias.cn/download
-    
+        A CUBE file from https://www.codonbias.cn/download or https://github.com/dyyvgug/CUBE/tree/master/resource/RSCU
+        
     aaseq3: bool, default=True
         If the value is True, the amino acid uses a three-letter code.
+    
+    Example
+    ----------
+    ref_Obs = get_Obs_from_CUBE_file("https://github.com/dyyvgug/CUBE/blob/master/resource/RSCU/Abditibacterium_utsteinense")
     """
     
     Seq1toSeq3 = {Seq3toSeq1[k]:k for k in Seq3toSeq1}
     Obs = {}
-    with open(file, 'r') as f:
-        for l in f:
-            if l.strip() != '' and not l.startswith('#'):
-                l = l.strip('\n').split()
-                if aaseq3==True:
-                    if l[0] in Seq1toSeq3:
-                        aa = Seq1toSeq3[l[0]]
-                    elif l[0] == 'STOP':
-                        aa = '*'
-                    else:
-                        continue
+    
+    if re.search("https://github.com/dyyvgug/CUBE/blob/master/resource/RSCU/", file):
+        url = file.replace("https://github.com/dyyvgug/CUBE/blob/master/resource/RSCU/",
+                          "https://raw.githubusercontent.com/dyyvgug/CUBE/refs/heads/master/resource/RSCU/")
+        response = urllib.request.urlopen(url)
+        f = io.StringIO()
+        print(response.read().decode('utf'), file=f)
+        f.seek(0)
+    else:
+        f = open(file, 'r')
+        
+    for l in f:
+        if l.strip() != '' and not l.startswith('#'):
+            l = l.strip('\n').split()
+            if aaseq3==True:
+                if l[0] in Seq1toSeq3:
+                    aa = Seq1toSeq3[l[0]]
+                elif l[0] == 'STOP':
+                    aa = '*'
                 else:
-                    if l[0] in Seq1toSeq3:
-                        aa = l[0]
-                    elif l[0] =="STOP":
-                        aa = "*"
-                    else:
-                        continue
-                if aa not in Obs:
-                    Obs.setdefault(aa, {l[1]:int(l[2])})
+                    continue
+            else:
+                if l[0] in Seq1toSeq3:
+                    aa = l[0]
+                elif l[0] =="STOP":
+                    aa = "*"
                 else:
-                    Obs[aa][l[1]] = int(l[2])
+                    continue
+            if aa not in Obs:
+                Obs.setdefault(aa, {l[1]:int(l[2])})
+            else:
+                Obs[aa][l[1]] = int(l[2])
+    f.close()
     return Obs
 
 def get_optimal_codons_from_codonw_coafile(file):
@@ -6392,6 +6410,7 @@ class Stop_Codon_Analysis():
             res.append(l[i%n])
         return res
 
+
 class TreePlotter:
     def __init__(
         self,
@@ -6654,54 +6673,12 @@ class TreePlotter:
         x_min, x_max = min(all_x), max(all_x)
         y_min, y_max = min(all_y), max(all_y)
         
-        x_padding = (x_max - x_min) * 0.1
+        x_padding = (x_max - x_min) * 0.3
         y_padding = (y_max - y_min) * 0.1
         
-        ax.set_xlim(x_min - x_padding, x_max + x_padding)
+        #ax.set_xlim(x_min - x_padding, x_max + x_padding)
+        ax.set_xlim(x_min - x_padding, x_max + (x_max - x_min) * 0.3)
         ax.set_ylim(y_min - y_padding, y_max + y_padding)
-    
-    def highlight_clade(
-        self, 
-        node_names, 
-        color, 
-        alpha= 0.3,
-        **kwargs
-    ):
-        """
-        Description 
-        ----------
-        Highlight a clade with background rectangle
-        
-        Parameters
-        ----------
-        node_names : list of str
-            Node names defining the clade
-        color : str
-            Fill color for the highlight
-        alpha : float
-            Transparency of the highlight (0-1)
-        **kwargs
-            Additional rectangle properties
-        """
-        # Find common ancestor of specified nodes
-        mrca = self.tree.lowest_common_ancestor(node_names)
-        
-        # Get all tips in the clade
-        tips = list(mrca.tips())
-        x_vals = [self.node_positions[tip.name][0] for tip in tips]
-        y_vals = [self.node_positions[tip.name][1] for tip in tips]
-        
-        # Create background rectangle
-        rect = Rectangle(
-            xy=(min(x_vals), min(y_vals)),
-            width=max(x_vals) - min(x_vals),
-            height=max(y_vals) - min(y_vals),
-            color=color,
-            alpha=alpha,
-            zorder=-10,
-            **kwargs
-        )
-        self._plot_patches.append(rect)
     
     def add_node_label(
         self, 
@@ -6772,6 +6749,56 @@ class TreePlotter:
             ax.text(x_data + length/2, y_data - (y_max-y_min)*0.02, 
                     label, ha='center', va='top', **kwargs)
         self._plot_funcs.append(_add_scale)
+        
+    def highlight_clade(
+        self, 
+        node_names, 
+        color, 
+        alpha= 0.3,
+        **kwargs
+    ):
+        """
+        Description 
+        ----------
+        Highlight a clade with background rectangle
+        
+        Parameters
+        ----------
+        node_names : list of str
+            Node names defining the clade
+        color : str
+            Fill color for the highlight
+        alpha : float
+            Transparency of the highlight (0-1)
+        **kwargs
+            Additional rectangle properties
+        """
+        # Find common ancestor of specified nodes
+        mrca = self.tree.lowest_common_ancestor(node_names)
+        
+        # Get all tips in the clade
+        tips = list(mrca.tips())
+        x_vals = [self.node_positions[tip.name][0] for tip in tips]
+        y_vals = [self.node_positions[tip.name][1] for tip in tips]
+        
+        all_x = [pos[0] for pos in self.node_positions.values()]
+        x_padding = (max(all_x) - min(all_x)) * 1
+        width =  max([self.node_positions[k][0] for k in self.node_positions])
+        
+        # Create background rectangle        
+        rect = Rectangle(
+            xy=(-0.5, min(y_vals)-0.5),
+            #xy=(min(x_vals), min(y_vals)),
+            width=width + x_padding,
+            #width=max(x_vals) - min(x_vals),
+            height=max(y_vals) - min(y_vals) + 1,
+            #height=max(y_vals) - min(y_vals),
+            color=color,
+            alpha=alpha,
+            zorder=-10,
+            **kwargs
+        )
+        self._plot_patches.append(rect)
 
 class Sequence_Indices_Analysis():
     def __init__(self, file, genetic_code, optimal_codons, cai_ref_Obs):
@@ -7098,3 +7125,113 @@ class Sequence_Indices_Analysis():
         if outfile != None:
             fig.savefig(outfile, dpi=600)
         return None
+        
+def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outfile=None):
+    """
+    Description
+    ----------
+    Draw codon optimization plot.
+    
+    The optimal expression of genes is achieved through the systematic design of the gene itself,
+    vector, host system, and culture conditions. Researchers routinely focus on selecting appropriate
+    expression vectors and host systems, but often ignore whether the gene itself achieves the best
+    match with the vector and host system.
+    
+    The most basic principle of codon optimization is to replace codons in foreign mRNA sequences 
+    with synonymous codons that are frequently used in host cells to ensure that the codons 
+    in foreign mRNA sequences are more compatible with the codon usage bias of host cells 
+    and avoid rare codons. The current mainstream codon optimization websites basically use 
+    optimization CAI as an indicator, for example: https://www.codonbias.cn/heterologous_expression.
+
+    However, we need to know that codons are not the only factors affecting protein expression.
+    There are other factors, such as rare codons, GC content, secondary structure (free energy), etc.
+    When all the codons in the foreign mRNA sequence are replaced with the best codons of the host cell,
+    the protein may not be expressed, because the expression of some proteins requires the presence 
+    of rare codons, which delays the progress of the ribosome and provides enough 
+    time for the correct folding of the protein.
+
+    However, for a specific amino acid sequence, due to the presence of synonymous codons,
+    there may be uncountable candidate mRNA sequences, so we do not provide an optimal solution for codon optimization.
+    Instead, we help researchers review the results by visualizing them and choose the 
+    combination of the optimal codon and the suboptimal codon.
+    
+    Parameters
+    ----------
+    sequence: str 
+        A sequence string.
+    
+    ref_Obs: dict
+        get_Obs(), get_Obs_from_emboss_cutfile(), and get_Obs_from_CUBE_file() function return value,
+        Observed number of occurrences of codon in a reference set of genes.
+    
+    genetic_code: int
+        A genetic code id, use `pycubs.CodonTables()` for more details.
+    
+    width: int, default=30
+        Amino acid length per row.
+    
+    outfile: str, default=None
+        A path of outfile.
+    """
+    
+    RA = get_Relative_Adaptiveness(ref_Obs)
+    start = 0
+    sequences = []
+    for i in range(int((len(sequence) - (len(sequence) % (width*3)))/(width*3) + 1)):
+        if start+width*3 > len(sequence):
+            sequences.append(sequence[start: len(sequence)])
+        else:
+            sequences.append(sequence[start: start + width*3])
+        start += width*3
+        
+    fig, axs = plt.subplots(len(sequences), 1, figsize=(width/2.3, 2.5*len(sequences)))
+    plt.subplots_adjust(hspace=0.3)
+    
+    for index, seq in enumerate(sequences):
+        Obs = get_Obs(seq, genetic_code=genetic_code)
+        seq_list = []
+        for i in range(0, len(seq), 3):
+            seq_list.append(seq.upper()[i:i+3])
+        x_labels = list(translate(seq, genetic_code=genetic_code))
+
+        if len(sequences) == 1:
+            axs = [axs]
+
+        axs[index].plot(range(0, len(x_labels)), [-1]*len(x_labels))
+        axs[index].set_xticks(range(0, len(x_labels)))
+        axs[index].set_xticklabels(x_labels)
+        axs[index].set_xlim(-1, width)
+        axs[index].set_ylim(0, 7)
+        axs[index].set_yticks([])
+
+        pos_dict = defaultdict(dict)
+        path = []
+        for x, aa in enumerate(x_labels):
+            for y, c in enumerate(sorted(ref_Obs[aa].keys(), key=lambda x: ref_Obs[aa][x], reverse=True)):
+                pos_dict[(x, aa)] = (y, c) 
+                axs[index].text(x, y, s=c, ha='center', va='bottom')
+                if seq_list[x] == c:
+                    path.append((x, y))
+
+        paths = []
+        for i in range(len(path)):
+            if i < len(path)-1:
+                paths.append((path[i], path[i+1]))
+
+        for p1, p2 in paths:
+             axs[index].annotate('', xy=(p2[0], p2[1]+0.25), xytext=(p1[0], p1[1]+0.25), rotation=0, 
+                         arrowprops=dict(color='#00A087FF', arrowstyle='-', connectionstyle='arc', alpha=0.5,
+                                         shrinkA=0, shrinkB=0, linewidth=3))
+
+    axs[-1].annotate('', xy=(math.floor(len(seq)/3) + 3, 1), xytext=(len(seq)/3 + 3, 5.5), rotation=0, 
+                     arrowprops=dict(shrink=0, edgecolor='#FB8072', facecolor="#FB8072", linewidth=0.5))
+    axs[index].text(x=math.floor(len(seq)/3) + 3 + 0.1, y=4.5, s='Low',rotation=90)
+    axs[index].text(x=math.floor(len(seq)/3) + 3 + 0.1, y=2.5, s='High',rotation=90)
+    axs[index].text(x=math.floor(len(seq)/3) + 3 - 0.5, y=2.5, s='CAI value',rotation=90)
+
+    axs[index].annotate('Raw CDS', xy=(path[-1][0], path[-1][1]+0.25), xytext=(path[-1][0] + 1, path[-1][1]+0.25), rotation=0, 
+                arrowprops=dict(color='#00A087FF', arrowstyle='-', connectionstyle='arc', alpha=0.5,
+                                shrinkA=0, shrinkB=0, linewidth=3))
+    if outfile != None:
+            fig.savefig(outfile, dpi=600)
+    return None
