@@ -170,14 +170,16 @@ def get_Fraction(Obs):
             self.Fraction_dict = obj
             
         def draw_barplot(self,
+                         figsize=(8,4),
                          ylabel='Fraction',
                          title=None,
-                         palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
                          width=0.9,
+                         palette=["#E89DA0", "#88CEE6", "#F6C8A8", "#B2D3A4", "#9FBA95", "#E6CECF", "#B696B6", "#80C1C4"],
                          remove_stop_codon=True,
                          figsize=(8,4),
                          codon_space = 0.16,
-                         ax=None, outfile=None):
+                         ax=None,
+                         outfile=None):
             """
             Description
             ----------
@@ -2336,7 +2338,7 @@ class RSCU_Single_Species_Analysis():
         
         Parameters
         ----------
-        figsize: tuple, default=(6,4)
+        figsize: tuple, default=(8,8)
             Figure size.
             
         gene_labels_color: str, default="black"
@@ -4392,7 +4394,7 @@ class AA_Composition_Single_Species_Analysis():
         ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
         if xlabel == None and dtype == "Fraction":
             xlabel = "Fraction"
-        if xlabel == None and dtype == "count":
+        if xlabel == None and dtype == "Count":
             xlabel = "Count"
         ax.set_xlabel(xlabel)
         if outfile != None:
@@ -5375,7 +5377,7 @@ class AA_Composition_Multiple_Species_Analysis():
         ax.set_yticklabels(ax.get_yticklabels(), fontstyle=fontstyle, fontsize=fontsize)
         if xlabel == None and dtype == "Fraction":
             xlabel = "Fraction"
-        if xlabel == None and dtype == "count":
+        if xlabel == None and dtype == "Count":
             xlabel = "Count"
         ax.set_xlabel(xlabel)
         if outfile != None:
