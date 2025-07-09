@@ -1654,33 +1654,53 @@ def get_ENC(Obs):
         ENC = None
     return ENC
 
-def find_four_codon_AA(Obs):
+def find_four_codon_AA(Obs, add_two_codon=False):
     """
     Description:
     ----------
-    Find the four-codon amino acids
+    Find the four-codon amino acids or two- and four-codon amino acids.
     
     Parameters
     ----------
     Obs: dict
         get_Obs() function return value.
+        
+    add_two_codon: bool
+        If add_two_codon=True, add two-codon amino acids to the result.
+    
+    Reference
+    ----------
+    [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause
+        of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
     """
     
     four_codon_AA = {}
     for AA in Obs:
-        if len(Obs[AA].keys()) > 3:
+        if AA == "*":
+            continue
+        if len(Obs[AA].keys()) > 1:
             m = {}
             for Codon in Obs[AA].keys():
                 if Codon[:2] not in m:
                     m.setdefault(Codon[:2], [Codon])
                 else:
                     m[Codon[:2]].append(Codon)
+            #print(m)
             for k in m:
                 if len(m[k]) == 4:
-                    four_codon_AA.setdefault(AA, m[k])
+                    if AA not in four_codon_AA:
+                        four_codon_AA.setdefault(AA, m[k])
+                    else:
+                        four_codon_AA[AA].extend(m[k])
+                if add_two_codon:
+                    if len(m[k]) ==2:
+                        if AA not in four_codon_AA:
+                            four_codon_AA.setdefault(AA, m[k])
+                        else:
+                            four_codon_AA[AA].extend(m[k])
     return four_codon_AA
 
-def get_PR2(Obs):
+def get_PR2(Obs, add_two_codon=False):
     """
     Description:
     ----------
@@ -1691,6 +1711,9 @@ def get_PR2(Obs):
     Obs: dict
         get_Obs() function return value.
         
+    add_two_codon: bool
+        If add_two_codon=True, add two-codon amino acids to the result.
+    
     Reference
     ----------
     [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause
@@ -1699,7 +1722,7 @@ def get_PR2(Obs):
         natural selection, and host features on Marburg virus evolution." BMC evolutionary biology 15 (2015): 1-15.
     """
     
-    four_codon_AA = find_four_codon_AA(Obs)
+    four_codon_AA = find_four_codon_AA(Obs, add_two_codon=add_two_codon)
     four_codon = [i for k in four_codon_AA for i in four_codon_AA[k]]
     ATGC3_four_codon = {}
     for AA in Obs:
@@ -1729,7 +1752,12 @@ def get_PR2(Obs):
         GC3_bias_four_codon = G3_four_codon / (G3_four_codon + C3_four_codon)
     else:
         GC3_bias_four_codon = None
-    return {"A3/(A3+T3)|4": AT3_bias_four_codon, "G3/(G3+C3)|4": GC3_bias_four_codon}
+        
+    if add_two_codon:
+        return {"A3/(A3+T3)|2 & 4": AT3_bias_four_codon, "G3/(G3+C3)|2 & 4": GC3_bias_four_codon}
+    else:
+        return {"A3/(A3+T3)|4": AT3_bias_four_codon, "G3/(G3+C3)|4": GC3_bias_four_codon}
+
 
 class NPA_Analysis():
     def __init__(self, file, genetic_code, sym=True):
@@ -2075,20 +2103,27 @@ class PR2_Analysis():
             the DNA G+C content of third codon position. Gene. 1999 Sep 30;238(1):53-8. doi: 10.1016/s0378-1119(99)00320-0. PMID: 10570983.
         """
         
-        ys = []
-        xs = []
+        ys_4 = []
+        xs_4 = []
+        ys_2_and_4 = []
+        xs_2_and_4 = []
         GeneName = []
         for ID, Seq in fastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
-            res = get_PR2(Obs)
-            ys.append(res["A3/(A3+T3)|4"])
-            xs.append(res["G3/(G3+C3)|4"])
+            res = get_PR2(Obs, add_two_codon=False)
+            ys_4.append(res["A3/(A3+T3)|4"])
+            xs_4.append(res["G3/(G3+C3)|4"])
+            res1 = get_PR2(Obs, add_two_codon=True)
+            ys_2_and_4.append(res1["A3/(A3+T3)|2 & 4"])
+            xs_2_and_4.append(res1["G3/(G3+C3)|2 & 4"])
             GeneName.append(ID)
             
         self.GeneName = GeneName
-        self.X_axis = xs
-        self.Y_axis = ys
-    
+        self.X_axis_4 = xs_4
+        self.Y_axis_4 = ys_4
+        self.X_axis_2_and_4 = xs_2_and_4
+        self.Y_axis_2_and_4 = ys_2_and_4
+        
     def __str__(self):
         return str(self.get_df())
     
@@ -2096,11 +2131,11 @@ class PR2_Analysis():
         return self.__str__()
     
     def get_df(self, outfile=None):
-        df = pd.DataFrame({"Gene Name":self.GeneName, "A3/(A3+T3)|4": self.X_axis, "G3/(G3+C3)|4": self.Y_axis})
+        df = pd.DataFrame({"Gene Name":self.GeneName, "A3/(A3+T3)| 4": self.X_axis_4, "G3/(G3+C3)| 4": self.Y_axis_4, "A3/(A3+T3)| 2 & 4": self.X_axis_2_and_4, "G3/(G3+C3)| 2 & 4": self.Y_axis_2_and_4})
         if outfile != None:
             df.to_csv(outfile, sep='\t', index=None)
         else:
-            return df 
+            return df
     
     def draw_PR2_plot(self, 
                       show_gene_names=False,
@@ -2115,6 +2150,7 @@ class PR2_Analysis():
                       ylabel=None, 
                       ax = None,
                       outfile=None,
+                      add_two_codon=False
                      ):
         """
         Description
@@ -2158,9 +2194,18 @@ class PR2_Analysis():
             
         outfile: str, default=None
             A path of outfile.
+        
+        add_two_codon: bool
+            If add_two_codon=True, add two-codon amino acids to the result.
         """
-        ys = self.X_axis
-        xs = self.Y_axis
+        
+        if add_two_codon:
+            ys = self.X_axis_2_and_4
+            xs = self.Y_axis_2_and_4
+        else:
+            ys = self.X_axis_4
+            xs = self.Y_axis_4
+        
         labels = self.GeneName
         
         if ax == None:
@@ -2173,10 +2218,14 @@ class PR2_Analysis():
         ax.set_ylim(0,1)
         if title == None:
             title="PR2 plot analysis"
-        if xlabel == None:
+        if xlabel == None and add_two_codon==False:
             xlabel="G$_3$/(G$_3$+C$_3$)|4"
-        if ylabel == None:
+        if xlabel == None and add_two_codon==True:
+            xlabel="G$_3$/(G$_3$+C$_3$)|2 & 4"
+        if ylabel == None and add_two_codon==False:
             ylabel="A$_3$/(A$_3$+T$_3$)|4"
+        if ylabel == None and add_two_codon==True:
+            ylabel="A$_3$/(A$_3$+T$_3$)|2 & 4"
             
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
