@@ -28,6 +28,7 @@ __all__ = ["translate",
            "get_cusp_like",
            "get_codonW_like",
            "find_four_codon_AA",
+           "infer_genetic_code_from_Obs",
            "TreePlotter",
            "NPA_Analysis",
            "ENC_Analysis",
@@ -1282,7 +1283,7 @@ def get_CBI(Obs, optimal_codons="Escherichia coli"):
     return CBI
 
 
-def get_CAI(Obs, ref_Obs="Escherichia coli", model="codonw", genetic_code=None):
+def get_CAI(Obs, ref_Obs="Escherichia coli", model="codonw"):
     """
     Description
     ----------
@@ -7223,7 +7224,14 @@ def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outf
     outfile: str, default=None
         A path of outfile.
     """
-    
+    if len(list(ref_Obs.keys())[0]) == 3:
+        tmp = {}
+        for aa in ref_Obs:
+            tmp.setdefault(Seq3toSeq1[aa], {})
+            for c in ref_Obs[aa]:
+                tmp[Seq3toSeq1[aa]][c] = ref_Obs[aa][c]
+        ref_Obs = tmp
+        
     RA = get_Relative_Adaptiveness(ref_Obs)
     start = 0
     sequences = []
@@ -7244,7 +7252,7 @@ def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outf
         for i in range(0, len(seq), 3):
             seq_list.append(seq.upper()[i:i+3])
         x_labels = list(translate(seq, genetic_code=genetic_code))
-
+        
         if len(sequences) == 1:
             axs = [axs]
             
@@ -7296,6 +7304,36 @@ def draw_codon_optimization_plot(sequence, ref_Obs, genetic_code, width=30, outf
     
     if outfile != None:
             fig.savefig(outfile, dpi=600)
-            
-    print(f">max_CAI_sequence Length={len(max_CAI_sequence)}\n{max_CAI_sequence}")
+    genetic_code=infer_genetic_code_from_Obs(ref_Obs)
+    CAI = get_CAI(Obs=get_Obs(max_CAI_sequence, genetic_code=genetic_code), ref_Obs=ref_Obs)
+    print(f">max_CAI_sequence CAI={CAI} Length={len(max_CAI_sequence)}\n{max_CAI_sequence}")
     return None
+    
+def infer_genetic_code_from_Obs(Obs):
+    """
+    Description 
+    ----------
+    Return a genetic code ID from Obs object.
+    
+    Parameters
+    ----------
+    Obs: dict
+        get_Obs() function return value.
+        
+    """
+    query_table = {c:aa for aa in Obs for c in Obs[aa]}
+    Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items()}
+    for i in [1,2,3,4,5,6,9,10,11,12,13,14,16,21,22,23,24,25,26,27,28,29,30,31,33]:
+        table = pycubs.CodonTables().get(i)
+        _status = True
+        for codon in table:
+            if len(query_table[codon]) == 3:
+                if table[codon] != query_table[codon]:
+                    _status = False
+                    break
+            else:
+                if table[codon] != Seq1toSeq3[query_table[codon]]:
+                    _status = False
+                    break
+        if _status:
+            return i
