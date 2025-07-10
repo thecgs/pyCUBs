@@ -1496,7 +1496,7 @@ def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optima
     tmp = []
     for record in fastaIO(file):
         Obs = get_Obs(record[1], genetic_code=genetic_code)
-        CAI = get_CAI(Obs, ref_Obs=cai_ref_Obs, model="codonw", genetic_code=genetic_code)
+        CAI = get_CAI(Obs, ref_Obs=cai_ref_Obs, model="codonw")
         Fop = get_Fop(Obs, optimal_codons)
         CBI = get_CBI(Obs, optimal_codons)
         res = get_ATGC_Indices(Obs)
@@ -2320,7 +2320,7 @@ class RSCU_Single_Species_Analysis():
             A path of outfile.
         """
         PCA_df = self.pca.column_correlations
-        PCA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")"]
+        PCA_df.columns = ["Dim 1 ("+self.pca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+self.pca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+self.pca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+self.pca.eigenvalues_summary.iloc[3, 1]+")"]
         PCA_df.index.name = "Genes"
         
         if outfile != None:
@@ -2345,10 +2345,10 @@ class RSCU_Single_Species_Analysis():
         ca_row = self.ca.row_coordinates(self.RSCU_df)
         ca_row["Type"] = "Codons"
         COA_df = pd.concat([ca_column, ca_row])
-        COA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")",
-                          "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")",
-                          "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")",
-                          "Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")", "Type"]
+        COA_df.columns = ["Dim 1 ("+self.ca.eigenvalues_summary.iloc[0, 1]+")",
+                          "Dim 2 ("+self.ca.eigenvalues_summary.iloc[1, 1]+")",
+                          "Dim 3 ("+self.ca.eigenvalues_summary.iloc[2, 1]+")",
+                          "Dim 4 ("+self.ca.eigenvalues_summary.iloc[3, 1]+")", "Type"]
         if outfile != None:
             COA_df.to_csv(outfile, sep='\t', index=None)
         else:
@@ -3255,7 +3255,7 @@ class RSCU_Multiple_Species_Analysis():
             A path of outfile.
         """
         PCA_df = self.pca.column_correlations
-        PCA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")"]
+        PCA_df.columns = ["Dim 1 ("+self.pca.eigenvalues_summary.iloc[0, 1]+")", "Dim 2 ("+self.pca.eigenvalues_summary.iloc[1, 1]+")", "Dim 3 ("+self.pca.eigenvalues_summary.iloc[2, 1]+")","Dim 4 ("+self.pca.eigenvalues_summary.iloc[3, 1]+")"]
         PCA_df.index.name = "Species"
         
         if outfile != None:
@@ -3280,10 +3280,10 @@ class RSCU_Multiple_Species_Analysis():
         ca_row = self.ca.row_coordinates(self.RSCU_df)
         ca_row["Type"] = "Codons"
         COA_df = pd.concat([ca_column, ca_row])
-        COA_df.columns = ["Dim 1 ("+ca.eigenvalues_summary.iloc[0, 1]+")",
-                          "Dim 2 ("+ca.eigenvalues_summary.iloc[1, 1]+")",
-                          "Dim 3 ("+ca.eigenvalues_summary.iloc[2, 1]+")",
-                          "Dim 4 ("+ca.eigenvalues_summary.iloc[3, 1]+")", "Type"]
+        COA_df.columns = ["Dim 1 ("+self.ca.eigenvalues_summary.iloc[0, 1]+")",
+                          "Dim 2 ("+self.ca.eigenvalues_summary.iloc[1, 1]+")",
+                          "Dim 3 ("+self.ca.eigenvalues_summary.iloc[2, 1]+")",
+                          "Dim 4 ("+self.ca.eigenvalues_summary.iloc[3, 1]+")", "Type"]
         if outfile != None:
             COA_df.to_csv(outfile, sep='\t', index=None)
         else:
@@ -7324,7 +7324,7 @@ def infer_genetic_code_from_Obs(Obs):
     query_table = {c:aa for aa in Obs for c in Obs[aa]}
     Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items()}
     for i in [1,2,3,4,5,6,9,10,11,12,13,14,16,21,22,23,24,25,26,27,28,29,30,31,33]:
-        table = pycubs.CodonTables().get(i)
+        table = CodonTables().get(i)
         _status = True
         for codon in table:
             if len(query_table[codon]) == 3:
