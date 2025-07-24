@@ -1810,8 +1810,9 @@ class NPA_Analysis():
         self.sym = sym
         self.R = R
         self.P = P
-        self.slope = slope
+        self.slope = slope                 # slope is degree of netrality, 1 - slope is degree of selective constraints.
         self.intercept = intercept
+        self.Ep = intercept / (1 - slope) # the equilibrium point
         self.GC1 = GC1
         self.GC2 = GC2
         self.GC3 = GC3
@@ -1847,6 +1848,7 @@ class NPA_Analysis():
                       xlabel=None,
                       ylabel=None, 
                       ax=None,
+                      truncate=True,
                       outfile=None,
                      ):
         """
@@ -1885,7 +1887,9 @@ class NPA_Analysis():
             
         ylabel: str, default=None
             Y-axis label of figtrue.
-            
+        truncate: bool, default=True
+            If True, the regression line is bounded by the data limits. If False, it extends to the x axis limits.
+        
         ax: matplotlib Axes, default=None
             Axes object to draw the plot onto, otherwise uses the current Axes.
             
@@ -1904,7 +1908,7 @@ class NPA_Analysis():
 
         if ylabel == None:
             if self.sym:
-                ylabel = "P$_1$$_2$/GC$_1$$_,$$_2$$_s$"
+                ylabel = "P$_1$$_2$/GC$_1$$_2$$_s$"
             else:
                 ylabel =  "GC$_1$$_,$$_2$"
         
@@ -1915,12 +1919,21 @@ class NPA_Analysis():
             
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
+                        
+        if truncate:
+            ax.plot(xs, xs, c=line_color)
+        else:
+            x = np.arange(0, 1.1, 0.1)
+            y = x
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.plot(x, y, c=line_color)
         
         sns.regplot(x=xs, y=ys, 
                     fit_reg=True,
                     scatter_kws={"color": point_color, 's': point_size, 'alpha':1}, 
                     line_kws={"color":line_color, "linewidth": 2}, 
-                    label="Regression Line",
+                    label="Regression Line", truncate=truncate,
                     ax=ax)
         
         if show_gene_names:
@@ -1930,13 +1943,11 @@ class NPA_Analysis():
                 else:
                     if l in show_gene_names:
                         ax.text(x, y, l, c=gene_names_color, size=gene_names_size)
-        
+                        
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_title(title)
-        ax.plot(xs, xs, c=line_color)
-        #ax.set_xlim((0, max(*ax.get_xlim(), *ax.get_ylim())))
-        #ax.set_ylim((0, max(*ax.get_xlim(), *ax.get_ylim())))
+        
         if outfile != None:
             fig.savefig(outfile, dpi=600)
         return None
