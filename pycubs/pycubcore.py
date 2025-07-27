@@ -32,6 +32,8 @@ __all__ = ["translate",
            "TreePlotter",
            "NPA_Analysis",
            "ENC_Analysis",
+           "get_PR2_fingerprint",
+           "draw_PR2_fingerprint",
            "PR2_Analysis",
            "Sequence_Indices_Analysis",
            "RSCU_Single_Species_Analysis",
@@ -1673,8 +1675,9 @@ def find_four_codon_AA(Obs, add_two_codon=False):
     ----------
     [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause
         of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
-    """
-    
+    [2] Sueoka, Noboru. "Intrastrand parity rules of DNA base composition and usage biases of synonymous codons".
+        Journal of Molecular Evolution (1995): 318-325.
+    """    
     four_codon_AA = {}
     for AA in Obs:
         if AA == "*":
@@ -1693,13 +1696,33 @@ def find_four_codon_AA(Obs, add_two_codon=False):
                         four_codon_AA.setdefault(AA, m[k])
                     else:
                         four_codon_AA[AA].extend(m[k])
-                if add_two_codon:
+                if add_two_codon and len(m[k]) != 4:
                     if len(m[k]) ==2:
                         if AA not in four_codon_AA:
                             four_codon_AA.setdefault(AA, m[k])
                         else:
                             four_codon_AA[AA].extend(m[k])
+                    if len(m[k]) ==3:
+                        type1 = []
+                        type2 = []
+                        for c in m[k]:
+                            if c[2] in ["T", "C"]:
+                                type1.append(c)
+                            else:
+                                type2.append(c)
+                        
+                        if len(type1) == 2:
+                            if AA not in four_codon_AA:
+                                four_codon_AA.setdefault(AA, type1)
+                            else:
+                                four_codon_AA[AA].extend(type1)
+                        if len(type2) == 2:
+                            if AA not in four_codon_AA:
+                                four_codon_AA.setdefault(AA, type2)
+                            else:
+                                four_codon_AA[AA].extend(type2)
     return four_codon_AA
+    
 
 def get_PR2(Obs, add_two_codon=False):
     """
@@ -1721,6 +1744,8 @@ def get_PR2(Obs, add_two_codon=False):
         of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
     [2] Nasrullah, Izza, et al. "Genomic analysis of codon usage shows influence of mutation pressure, 
         natural selection, and host features on Marburg virus evolution." BMC evolutionary biology 15 (2015): 1-15.
+    [3] Sueoka, Noboru. "Intrastrand parity rules of DNA base composition and usage biases of synonymous codons".
+        Journal of Molecular Evolution (1995): 318-325.
     """
     
     four_codon_AA = find_four_codon_AA(Obs, add_two_codon=add_two_codon)
@@ -1759,9 +1784,8 @@ def get_PR2(Obs, add_two_codon=False):
     else:
         return {"A3/(A3+T3)|4": AT3_bias_four_codon, "G3/(G3+C3)|4": GC3_bias_four_codon}
 
-
 class NPA_Analysis():
-    def __init__(self, file, genetic_code, sym=True):
+    def __init__(self, file, genetic_code, mode="P3-P12"):
         """
         Description
         ----------
@@ -1774,12 +1798,13 @@ class NPA_Analysis():
             
         genetic_code: int
             A genetic code id, use `pycubs.CodonTables()` for more details.
-        
-        sym: bool, default=True
-            Only synonymous codons model,
+            
+        mode: {"P3-P12", "GC3s-GC12s", "GC3-GC12"}, default="P3-P12"
+            P3-P12: The P-value defined by Sueoka (1999).
+            GC3s-GC12s: Only synonymous codons are used in the calculation.
+            GC3-GC12: All the codons, except for the stop codons, are used in the calculation.
             If the value is True, amino acids without synonymous codons and stop codons are deleted.
         """
-        
         GC1 = []
         GC2 = []
         GC3 = []
@@ -1787,30 +1812,49 @@ class NPA_Analysis():
         GeneName = []
         for ID, Seq in fastaIO(file):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
-            res = get_ATGC_Indices(Obs)
-            if sym == True:
+            if  mode == "GC3s-GC12s":
+                res = get_ATGC_Indices(Obs)
                 if res["GC1s"] !=None and res["GC2s"] !=None and res["GC12s"] !=None and res["GC3s"] !=None:
                     GC1.append(res["GC1s"])
                     GC2.append(res["GC2s"])
                     GC3.append(res["GC3s"])
                     GC12.append(res["GC12s"])
-            else:
+            elif mode == "GC3-GC12":
+                res = get_ATGC_Indices(Obs)
                 if res["GC1"] !=None and res["GC2"] !=None and res["GC12"] !=None and res["GC3"] !=None:
                     GC1.append(res["GC1"])
                     GC2.append(res["GC2"])
                     GC3.append(res["GC3"])
                     GC12.append(res["GC12"])
+            elif mode == "P3-P12":
+                P1_count = {'A': 0, 'T':0, 'G':0, 'C':0}
+                P2_count = {'A': 0, 'T':0, 'G':0, 'C':0}
+                P3_count = {'A': 0, 'T':0, 'G':0, 'C':0}
+                tmp = find_four_codon_AA(Obs, add_two_codon=True)
+                PR2_codons =[c for aa in tmp for c in tmp[aa]]
+                for AA in Obs:
+                    for codon in Obs[AA]:
+                        if codon in PR2_codons:
+                            P1_count[codon[0]] += Obs[AA][codon]
+                            P2_count[codon[1]] += Obs[AA][codon]
+                            P3_count[codon[2]] += Obs[AA][codon]
+                P1 = (P1_count['G'] + P1_count['C']) / (P1_count['A'] + P1_count['T'] + P1_count['G'] + P1_count['C'])
+                P2 = (P2_count['G'] + P2_count['C']) / (P2_count['A'] + P2_count['T'] + P2_count['G'] + P2_count['C'])
+                P3 = (P3_count['G'] + P3_count['C']) / (P3_count['A'] + P3_count['T'] + P3_count['G'] + P3_count['C'])
+                GC1.append(P1)
+                GC2.append(P2)
+                GC3.append(P3)
+                GC12.append((P1+P2)/2)
             GeneName.append(ID)
-                
         PearsonRResult = ss.pearsonr(GC3, GC12)
         R = PearsonRResult[0]
         P = PearsonRResult[1]
         slope, intercept = np.polyfit(GC3, GC12, 1)
         
-        self.sym = sym
+        self.mode = mode
         self.R = R
         self.P = P
-        self.slope = slope                 # slope is degree of netrality, 1 - slope is degree of selective constraints.
+        self.slope = slope           # slope is degree of netrality, 1 - slope is degree of selective constraints.
         self.intercept = intercept
         self.Ep = intercept / (1 - slope) # the equilibrium point
         self.GC1 = GC1
@@ -1826,31 +1870,31 @@ class NPA_Analysis():
         return self.__str__()
     
     def get_df(self, outfile=None):
-        if self.sym:
+        if self.mode=="GC3s-GC12s":
             df = pd.DataFrame({"Gene Name":self.GeneName, "GC3s": self.GC3, "GC12s": self.GC12, "GC1s": self.GC1, "GC2s": self.GC2})
-        else:
+        elif self.mode == "GC3-GC12":
             df = pd.DataFrame({"Gene Name":self.GeneName, "GC3": self.GC3, "GC12": self.GC12, "GC1": self.GC1, "GC2": self.GC2})
-        
+        elif self.mode == "P3-P12":
+            df = pd.DataFrame({"Gene Name":self.GeneName, "P3": self.GC3, "P12": self.GC12, "P1": self.GC1, "P2": self.GC2})
         if outfile != None:
             df.to_csv(outfile, index=None, sep='\t')
         else:
             return df
         
     def draw_NPA_plot(self, 
-                      figsize=(6,4),
-                      show_gene_names=False,
-                      gene_names_size=10,
-                      gene_names_color="#0A0A0A",
-                      point_color="#4F845C",
-                      point_size=20,
-                      line_color="#C25759", 
-                      title=None,
-                      xlabel=None,
-                      ylabel=None, 
-                      ax=None,
-                      truncate=True,
-                      outfile=None,
-                     ):
+                figsize=(6,4),
+                show_gene_names=False,
+                gene_names_size=10,
+                gene_names_color="#0A0A0A",
+                point_color="#4F845C",
+                point_size=20,
+                line_color="#C25759", 
+                title=None,
+                xlabel=None,
+                ylabel=None, 
+                ax=None,
+                truncate=True,
+                outfile=None):
         """
         Description
         ----------
@@ -1901,16 +1945,20 @@ class NPA_Analysis():
         labels = self.GeneName
         
         if xlabel == None:
-            if self.sym:
-                xlabel = "P$_3$/GC$_3$$_s$"
+            if self.mode=="P3-P12":
+                xlabel = "P$_3$"
+            elif self.mode == "GC3s-GC12s":
+                xlabel = "GC$_3$$_s$"
             else:
                 xlabel = "GC$_3$"
-
+                
         if ylabel == None:
-            if self.sym:
-                ylabel = "P$_1$$_2$/GC$_1$$_2$$_s$"
+            if self.mode=="P3-P12":
+                ylabel = "P$_1$$_2$"
+            elif self.mode == "GC3s-GC12s":
+                ylabel = "GC$_1$$_2$$_s$"
             else:
-                ylabel =  "GC$_1$$_,$$_2$"
+                ylabel =  "GC$_1$$_2$"
         
         if title == None:
             title = "Neutral plot analysis"
@@ -2092,6 +2140,116 @@ class ENC_Analysis():
             fig.savefig(outfile, dpi=600)
         return None
 
+def get_PR2_fingerprint(file, genetic_code):
+    """
+    Description
+    ----------
+    get RP2 fingerprint data.
+    
+    Parameters
+    ----------
+    file: str
+        A fasta or fasta.gz format file include of CDS seqence.
+        
+    genetic_code: int
+        A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+    Reference
+    ----------
+    [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause
+        of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
+    [2] Sueoka, Noboru. "Intrastrand parity rules of DNA base composition and usage biases of synonymous codons".
+        Journal of Molecular Evolution (1995): 318-325.
+    """
+    
+    Obs = get_Obs(seqences=file, genetic_code=genetic_code)
+    four_codon_AA = find_four_codon_AA(Obs)
+    AA_list = []
+    x_list = []
+    y_list = []
+    AA_count_list = []
+    ATGC_count = {"A":0, "T":0, "G":0, "C":0}
+    for AA in sorted(Obs.keys()):
+        if AA in four_codon_AA:
+            tmp = {"A":0, "T":0, "G":0, "C":0}
+            AA_count = 0
+            for codon in Obs[AA]:
+                tmp[codon[2]] += Obs[AA][codon]
+                ATGC_count[codon[2]] += Obs[AA][codon]
+                AA_count += Obs[AA][codon]
+            
+            x = tmp["G"] / (tmp["G"] + tmp["C"])
+            y = tmp["A"] / (tmp["A"] + tmp["T"])
+            AA_list.append(AA)
+            x_list.append(x)
+            y_list.append(y)
+            AA_count_list.append(AA_count)
+    AA_list.append("Mean")
+    x_list.append(ATGC_count["G"] / (ATGC_count["G"] + ATGC_count["C"]))
+    y_list.append(ATGC_count["A"] / (ATGC_count["A"] + ATGC_count["T"]))
+    AA_count_list.append(sum(AA_count_list)/len(AA_count_list))
+    shapes = ["o", "s", "^", "<", ">", "v", "p", "d", "*"][0:len(x_list)-1]
+    shapes.append("P")
+    colors = ["#1F77B4FF", "#FF7F0EFF", "#2CA02CFF", "#D62728FF", "#9467BDFF", "#8C564BFF", "#E377C2FF","#BCBD22FF", "#17BECFFF"][0:len(x_list)-1]
+    colors.append("#7F7F7FFF")
+    df = pd.DataFrame({"Amino acid":AA_list, "G3/(G3+C3)|4":x_list, "A3/(A3+T3)|4":y_list, "Amino acid count":AA_count_list, "Colors":colors, "Shapes": shapes})
+    return df
+
+def draw_PR2_fingerprint(df, figsize = (6,4), title = None, ax = None, line_color = "#C25759", point_size = 100):
+    """
+    Description
+    ----------
+    Draw RP2 fingerprint.
+    
+    Parameters
+    ----------
+    df: Dataframe
+        A return values from get_PR2_fingerprint() function.
+        
+    figsize: tuple, default=(6,4)
+        Figure size.
+        
+    point_size: float, default=100
+            Point size.
+    
+    line_color: str, default="#C25759"
+        strand line color.
+               
+    title: str, default=None
+        Title of figture.
+    
+    ax: matplotlib Axes, default=None
+        Axes object to draw the plot onto, otherwise uses the current Axes.
+            
+    outfile: str, default=None
+        A path of outfile.
+        
+    Reference
+    ----------
+    [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause
+        of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
+    [2] Sueoka, Noboru. "Intrastrand parity rules of DNA base composition and usage biases of synonymous codons".
+        Journal of Molecular Evolution (1995): 318-325.
+    """
+    
+    if ax == None:
+        fig, ax = plt.subplots(figsize=figsize)
+    ax.axhline(0.5, c=line_color)
+    ax.axvline(0.5, c=line_color)
+    ax.set_xlim(0,1)
+    ax.set_ylim(0,1)
+    if title == None:
+        title="PR2 biases fingerprint"
+    xlabel="G$_3$/(G$_3$+C$_3$)|4"
+    ylabel="A$_3$/(A$_3$+T$_3$)|4"
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    for x, y, aa, c, s in zip(df["G3/(G3+C3)|4"], df["A3/(A3+T3)|4"], df["Amino acid"], df["Colors"], df["Shapes"]):
+        ax.scatter(x, y, c=c, s=point_size, label=aa, marker=s, alpha=1)
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1), ncol=1, frameon=False, shadow=False, title='')
+    return None
+
 class PR2_Analysis():
     def __init__(self, file, genetic_code):
         """
@@ -2135,6 +2293,7 @@ class PR2_Analysis():
         self.Y_axis_4 = ys_4
         self.X_axis_2_and_4 = xs_2_and_4
         self.Y_axis_2_and_4 = ys_2_and_4
+        self.PR2_fingerprint_df = get_PR2_fingerprint(file, genetic_code=genetic_code)
         
     def __str__(self):
         return str(self.get_df())
@@ -2254,7 +2413,46 @@ class PR2_Analysis():
         if outfile != None:
             fig.savefig(outfile, dpi=600)
         return None
+    
+    def draw_PR2_fingerprint(self, figsize = (6,4), title = None, ax = None, line_color = "#C25759", point_size = 100):
+        """
+        Description
+        ----------
+        Draw RP2 fingerprint.
 
+        Parameters
+        ----------
+        df: Dataframe
+            A return values from get_PR2_fingerprint() function.
+
+        figsize: tuple, default=(6,4)
+            Figure size.
+
+        point_size: float, default=100
+                Point size.
+
+        line_color: str, default="#C25759"
+            strand line color.
+
+        title: str, default=None
+            Title of figture.
+
+        ax: matplotlib Axes, default=None
+            Axes object to draw the plot onto, otherwise uses the current Axes.
+
+        outfile: str, default=None
+            A path of outfile.
+
+        Reference
+        ----------
+        [1] Sueoka, Noboru. "Translation-coupled violation of Parity Rule 2 in human genes is not the cause
+            of heterogeneity of the DNA G+ C content of third codon position." Gene 238.1 (1999): 53-58.
+        [2] Sueoka, Noboru. "Intrastrand parity rules of DNA base composition and usage biases of synonymous codons".
+            Journal of Molecular Evolution (1995): 318-325.
+        """
+        draw_PR2_fingerprint(df=self.PR2_fingerprint_df, figsize = figsize, title = title, ax = ax, line_color = line_color, point_size = point_size)
+        return None
+    
 class RSCU_Single_Species_Analysis():
     def __init__(self, file, genetic_code):
         """
