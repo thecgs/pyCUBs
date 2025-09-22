@@ -7,7 +7,7 @@ __version__ = "v0.01"
 
 import gzip
 
-def fastaIO(file):
+def _fastaIO(file):
     """
     Description 
     ----------
@@ -22,21 +22,20 @@ def fastaIO(file):
     if isinstance(file, str):
         if file.endswith('.gz'):
             handle = gzip.open(file, 'rt')
-            print(handle)
         else:
             handle = open(file, 'r')
             
     elif type(file) == '_io.TextIOWrapper':
         handle = file
-        
+    else:
+        pass
+    
     for line in handle:
         if line[0] == ">":
             title = line[1:].rstrip()
             ID = title.split()[0]
             break
-    else:
-        pass
-        return
+    
     lines = []
     for line in handle:
         if line[0] == ">":
@@ -50,3 +49,26 @@ def fastaIO(file):
     #yield title, "".join(lines).replace(" ", "").replace("\r", "")
     yield ID, "".join(lines).replace(" ", "").replace("\r", "")
     handle.close()
+    
+def fastaIO(file, min_len=0):
+    """
+    Description 
+    ----------
+    Reads the Fasta format file and returns a generator.
+    
+    Parameters
+    ----------
+    file: str
+        Read a fasta file path and support compressed files ending in ".gz", or accept a handle of "_io.TextIOWrapper" class.
+        
+    min_len: int
+        Sequences smaller than this length will be filtered.
+    """
+    
+    if min_len == 0:
+        for record in _fastaIO(file):
+            yield record
+    else:
+        for record in _fastaIO(file):
+            if len(record[1]) >= min_len: 
+                yield record

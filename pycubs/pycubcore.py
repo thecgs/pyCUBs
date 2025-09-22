@@ -82,13 +82,15 @@ def translate(cds, genetic_code):
         A genetic code id, use `pycubs.CodonTables()` for more details.
     """
     
-    protein = ""
+    #protein = ""
+    protein = []
     codotable = CodonTables().get(genetic_code, aaseq3=False)
     for i in range(0, len(cds), 3):
-        protein += codotable.get(cds.upper()[i:i+3], "X")
-    return protein
+        #protein += codotable.get(cds.upper()[i:i+3], "X")
+        protein.append(codotable.get(cds.upper()[i:i+3], "X"))
+    return ''.join(protein)
     
-def get_Obs(seqences, genetic_code, aaseq3=True):
+def get_Obs(seqences, genetic_code, aaseq3=True, min_len=0):
     """
     Description 
     ----------
@@ -104,24 +106,26 @@ def get_Obs(seqences, genetic_code, aaseq3=True):
     
     aaseq3: bool, default=True
         If the value is True, the amino acid uses a three-letter code.
+    min_len: int
+        Sequences smaller than this length will be filtered.
     """
     
     codontable = CodonTables().get(genetic_code, aaseq3)
     
-    def _fastaIO(file):
-        for ID, Seq in fastaIO(file):
+    def _fastaIO(file, min_len):
+        for ID, Seq in fastaIO(file, min_len=min_len):
             yield Seq
     
     if isinstance(seqences, str):
         if os.path.exists(seqences):
-            seqences = _fastaIO(seqences)
+            seqences = _fastaIO(seqences, min_len)
         else:
             seqences = [seqences.upper()]
             
     elif isinstance(seqences, list) or isinstance(seqences, tuple):
         pass
     else:
-        seqences = [str(seqences).upper()]
+        seqences = [str(seqences)]
         
     Codons = {}
     for Seq in seqences:
@@ -1084,7 +1088,7 @@ def get_optimal_codons_from_codonw_coafile(file):
             cs.append(c)
     return sorted(cs)
 
-def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_rscu=0.08):
+def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_rscu=0.08, min_len=0):
     """
     Description 
     ----------
@@ -1108,6 +1112,8 @@ def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_
     
     delta_rscu: float, default=0.08
         Delta RSCU = RSCU in low ENC group - RSCU in high ENC group
+    min_len: int
+        Sequences smaller than this length will be filtered.
     
     Reference
     ----------
@@ -1117,7 +1123,7 @@ def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_
     """
     
     ENC_dict = {}
-    for ID, Seq in fastaIO(file):
+    for ID, Seq in fastaIO(file, min_len=min_len):
         Obs = get_Obs(Seq, genetic_code=genetic_code)
         enc = get_ENC(Obs)
         if enc != None:
@@ -1129,7 +1135,7 @@ def get_optimal_codons_from_ENC(file, genetic_code=11, ratio=0.1, rscu=1, delta_
     low_enc_seq_list = []
     high_enc_seq_list = []
     
-    for ID, Seq in fastaIO(file):
+    for ID, Seq in fastaIO(file, min_len=min_len):
         if ID in ENC_dict:
             if ENC_dict[ID] >= high_enc_critical_value:
                 high_enc_seq_list.append(Seq)
@@ -1459,7 +1465,7 @@ def get_cusp_like(Obs, human_format=False, outfile=None):
         else:
             return CupsResult
 
-def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optimal_codons="Escherichia coli", outfile=None):
+def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optimal_codons="Escherichia coli", outfile=None, min_len=0):
     """
     Description
     ----------
@@ -1488,7 +1494,10 @@ def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optima
     
     outfile: str, default=None
         A path of outfile.
-    
+        
+    min_len: int
+        Sequences smaller than this length will be filtered.
+        
     Reference
     ----------
     [1] Peden, John F. Analysis of codon usage. Diss. University of Nottingham, 2000.
@@ -1496,7 +1505,7 @@ def get_codonW_like(file, genetic_code=1, cai_ref_Obs="Escherichia coli", optima
     
     #GCn3 = (GC - G3s -C3s )/(L_aa *3 - L_sym)
     tmp = []
-    for record in fastaIO(file):
+    for record in fastaIO(file, min_len=min_len):
         Obs = get_Obs(record[1], genetic_code=genetic_code)
         CAI = get_CAI(Obs, ref_Obs=cai_ref_Obs, model="codonw")
         Fop = get_Fop(Obs, optimal_codons)
@@ -1785,7 +1794,7 @@ def get_PR2(Obs, add_two_codon=False):
         return {"A3/(A3+T3)|4": AT3_bias_four_codon, "G3/(G3+C3)|4": GC3_bias_four_codon}
 
 class NPA_Analysis():
-    def __init__(self, file, genetic_code, mode="P3-P12"):
+    def __init__(self, file, genetic_code, mode="P3-P12", min_len=0):
         """
         Description
         ----------
@@ -1804,13 +1813,16 @@ class NPA_Analysis():
             GC3s-GC12s: Only synonymous codons are used in the calculation.
             GC3-GC12: All the codons, except for the stop codons, are used in the calculation.
             If the value is True, amino acids without synonymous codons and stop codons are deleted.
+            
+        min_len: int
+            Sequences smaller than this length will be filtered.
         """
         GC1 = []
         GC2 = []
         GC3 = []
         GC12 = []
         GeneName = []
-        for ID, Seq in fastaIO(file):
+        for ID, Seq in fastaIO(file, min_len=min_len):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
             if  mode == "GC3s-GC12s":
                 res = get_ATGC_Indices(Obs)
@@ -1962,8 +1974,8 @@ class NPA_Analysis():
         
         if title == None:
             title = "Neutral plot analysis"
-            formula = '$y$ = {:.4f}$x$ + {:.4f}; $R$$^2$ = {:.4f}; $P$ = {:.4f}'.format(self.slope, self.intercept, pow(self.R, 2), self.P)
-            title = title+"\n"+formula
+        formula = '$y$ = {:.4f}$x$ + {:.4f}; $R$$^2$ = {:.4f}; $P$ = {:.4f}'.format(self.slope, self.intercept, pow(self.R, 2), self.P)
+        title = title+"\n"+formula
             
         if ax == None:
             fig, ax = plt.subplots(figsize=figsize)
@@ -2001,7 +2013,7 @@ class NPA_Analysis():
         return None
 
 class ENC_Analysis():
-    def __init__(self, file, genetic_code):
+    def __init__(self, file, genetic_code, min_len=0):
         """
         Description
         ----------
@@ -2014,12 +2026,15 @@ class ENC_Analysis():
         
         genetic_code: int
             A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        min_len: int
+            Sequences smaller than this length will be filtered.
         """
         
         ys = []
         xs = []
         GeneName = []
-        for ID, Seq in fastaIO(file):
+        for ID, Seq in fastaIO(file, min_len=min_len):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
             xs.append(get_ATGC_Indices(Obs)["GC3s"])
             try:
@@ -2251,7 +2266,7 @@ def draw_PR2_fingerprint(df, figsize = (6,4), title = None, ax = None, line_colo
     return None
 
 class PR2_Analysis():
-    def __init__(self, file, genetic_code):
+    def __init__(self, file, genetic_code, min_len=0):
         """
         Description
         ----------
@@ -2264,6 +2279,9 @@ class PR2_Analysis():
         
         genetic_code: int
             A genetic code id, use `pycubs.CodonTables()` for more details.
+            
+        min_len: int
+            Sequences smaller than this length will be filtered.
 
         Reference
         ----------
@@ -2278,7 +2296,7 @@ class PR2_Analysis():
         ys_2_and_4 = []
         xs_2_and_4 = []
         GeneName = []
-        for ID, Seq in fastaIO(file):
+        for ID, Seq in fastaIO(file, min_len=min_len):
             Obs = get_Obs(seqences=Seq, genetic_code=genetic_code)
             res = get_PR2(Obs, add_two_codon=False)
             ys_4.append(res["A3/(A3+T3)|4"])
@@ -2454,7 +2472,7 @@ class PR2_Analysis():
         return None
     
 class RSCU_Single_Species_Analysis():
-    def __init__(self, file, genetic_code):
+    def __init__(self, file, genetic_code, min_len=0):
         """
         Description
         ----------
@@ -2467,10 +2485,13 @@ class RSCU_Single_Species_Analysis():
         
         genetic_code: int
             A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        min_len: int
+            Sequences smaller than this length will be filtered.
         """
         
         df_list = []
-        for name, seq in fastaIO(file):
+        for name, seq in fastaIO(file, min_len=min_len):
             RSCU = get_RSCU(get_Obs(seq, genetic_code=genetic_code))
             df_list.append(pd.DataFrame({name:{(aa,c):RSCU.RSCU_dict[aa][c] for aa in RSCU.RSCU_dict for c in RSCU.RSCU_dict[aa]}}))
         df = pd.concat(df_list, axis=1)
@@ -4318,7 +4339,7 @@ class RSCU_Multiple_Species_Analysis():
         return None
 
 class AA_Composition_Single_Species_Analysis():
-    def __init__(self, file, genetic_code):
+    def __init__(self, file, genetic_code, min_len=0):
         """
         Description
         ----------
@@ -4331,12 +4352,15 @@ class AA_Composition_Single_Species_Analysis():
         
         genetic_code: int
             A genetic code id, use `pycubs.CodonTables()` for more details.
+            
+        min_len: int
+            Sequences smaller than this length will be filtered.
         """
         
         Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
         
         AA_count_list = []
-        for ID, Seq in fastaIO(file):
+        for ID, Seq in fastaIO(file, min_len=min_len):
             AA_count = {'Gly':0, 'Ala':0, 'Val':0, 'Leu':0, 'Ile':0,
                         'Glu':0, 'Gln':0, 'Asp':0, 'Asn':0, 'Met':0,
                         'Ser':0, 'Thr':0, 'Phe':0, 'Trp':0, 'Tyr':0,
@@ -5304,7 +5328,7 @@ class AA_Composition_Single_Species_Analysis():
         return None
 
 class AA_Composition_Multiple_Species_Analysis():
-    def __init__(self, data, genetic_code):
+    def __init__(self, data, genetic_code, min_len=0):
         """
         Description
         ----------
@@ -5317,14 +5341,18 @@ class AA_Composition_Multiple_Species_Analysis():
         
         genetic_code: int
             A genetic code id, use `pycubs.CodonTables()` for more details.
+            
+        min_len: int
+            Sequences smaller than this length will be filtered.
         """
         
         Seq1toSeq3 = {v:k for k,v in Seq3toSeq1.items() if k!='*'}
         
         AA_count_dict = {}
         for prefix, file in data:
+            print(prefix)
             AA_count = defaultdict(int)
-            for ID, Seq in fastaIO(file):
+            for ID, Seq in fastaIO(file, min_len=min_len):
                 for i in translate(Seq, genetic_code=genetic_code):
                     AA_count[i] = AA_count[i] + 1
                     
@@ -6289,7 +6317,7 @@ class AA_Composition_Multiple_Species_Analysis():
         return None
     
 class Stop_Codon_Analysis():
-    def __init__(self, data, genetic_code, incomplete_codon=True):
+    def __init__(self, data, genetic_code, incomplete_codon=True, min_len=0):
         """
         Description
         ----------
@@ -6302,13 +6330,16 @@ class Stop_Codon_Analysis():
         
         genetic_code: int
             A genetic code id, use `pycubs.CodonTables()` for more details.
+        
+        min_len: int
+            Sequences smaller than this length will be filtered.
         """
         StopCodon_Count_dict = {}
         GeneName2StopCodon_dict = {}
         for prefix, file in data:
             StopCodon_Count = defaultdict(int)
             GeneName2StopCodon = {}
-            for ID, Seq in fastaIO(file):
+            for ID, Seq in fastaIO(file, min_len=min_len):
                 if len(Seq) % 3 == 0:
                     codon = Seq[-3:]
                     if translate(codon, genetic_code=genetic_code) == "*":
@@ -7061,7 +7092,7 @@ class TreePlotter:
         self._plot_patches.append(rect)
 
 class Sequence_Indices_Analysis():
-    def __init__(self, file, genetic_code, optimal_codons, cai_ref_Obs):
+    def __init__(self, file, genetic_code, optimal_codons, cai_ref_Obs, min_len=0):
         """
         Description
         ----------
@@ -7087,6 +7118,9 @@ class Sequence_Indices_Analysis():
             or it can be a preset value from the codonw software, such as "Escherichia coli",
             "Bacillus subtilis", "Dictyostelium discoideum", "Aspergillus nidulans", 
             "Saccharomyces cerevisiae", "Drosophila melanogaster", "Caenorhabditis elegans", "Neurospora crassa"
+        
+        min_len: int
+            Sequences smaller than this length will be filtered.
         """
         tmp = []
         index = ['A', 'T', 'G', 'C', 'GC', 'AT', 'GC-skew', 'AT-skew',
@@ -7098,7 +7132,7 @@ class Sequence_Indices_Analysis():
                  'A3s', 'T3s', 'G3s', 'C3s', 'GC3s', 'AT3s', 'GC12s',
                  'A3s codonW', 'T3s codonW', 'G3s codonW', 'C3s codonW', 'L_sym', 'L_aa',
                  'Aromaticity', 'Hydropathicity', 'ENC', 'CAI', 'CBI', 'Fop']
-        for name, seq in fastaIO(file):
+        for name, seq in fastaIO(file, min_len=min_len):
             Obs = get_Obs(seq, genetic_code=genetic_code)
             Indices = get_ATGC_Indices(Obs)
             Indices["Aromaticity"] = get_Aromo(Obs)
